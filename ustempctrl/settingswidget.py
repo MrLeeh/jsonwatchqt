@@ -4,15 +4,15 @@ from PyQt5.QtWidgets import QWidget, QLabel, QGridLayout, QApplication, \
     QPushButton, QDialog, QCheckBox
 import sys
 from serial.serialutil import SerialException
-from jsonwatch.jsonitem import JsonItem
-from jsonwatch.jsonnode import JsonNode
+from jsonwatch.jsonobject import JsonObject
+from jsonwatch.jsonvalue import JsonValue
 from ustempctrl.jsonmapper import JsonMapper
 from ustempctrl.miscwidgets import MySpinBox
 from ustempctrl.utilities import critical
 
 
 class CtrlSettingsWidget(QDialog):
-    def __init__(self, serial, rootnode: JsonNode, parent=None):
+    def __init__(self, serial, rootnode: JsonObject, parent=None):
         super().__init__(parent)
         self.serial = serial
         self.rootnode = rootnode
@@ -88,8 +88,8 @@ class CtrlSettingsWidget(QDialog):
 
     def request_settings(self):
         # send request for setting data
-        node = JsonNode('root')
-        node.add_child(JsonItem('send_settings', 1))
+        node = JsonObject('root')
+        node.add_child(JsonValue('send_settings', 1))
         try:
             self.serial.write(bytearray(node.to_json(), 'utf-8'))
         except AttributeError as e:

@@ -1,7 +1,7 @@
-#!python 3
+#!python3
 import sys
 from ustempctrl.mainwindow import CtrlTestGui
-from PyQt5.QtCore import QCoreApplication
+from PyQt5.QtCore import QCoreApplication, QSettings
 from PyQt5.QtWidgets import QApplication
 
 # Config Application

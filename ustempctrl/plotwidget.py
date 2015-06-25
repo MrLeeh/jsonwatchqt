@@ -5,11 +5,11 @@
 import datetime
 import os
 import sys
-from PyQt5.QtCore import QByteArray, QIODevice, QDataStream
+from PyQt5.QtCore import QByteArray, QIODevice, QDataStream, QSettings
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QApplication
-from matplotlib.dates import date2num
-from jsonwatch.jsonnode import JsonNode
+from pyqtconfig.config import QSettingsManager
+from jsonwatch.jsonobject import JsonObject
 
 os.environ['QT_API'] = 'pyqt5'
 
@@ -57,11 +57,13 @@ class MyCanvas(FigureCanvas):
 
 
 class PlotWidget(QWidget):
-    def __init__(self, rootnode: JsonNode, parent=None):
+    def __init__(self, rootnode: JsonObject, parent=None):
         super().__init__(parent)
+        self.settings = QSettings()
         self.rootnode = rootnode
         self.plotitems = []
         self.starttime = datetime.datetime.now()
+        self.dirty = False
 
         # matplotlib figure
         self.fig = pylab.figure()
@@ -97,12 +99,27 @@ class PlotWidget(QWidget):
         self.canvas.draw()
 
     def refresh(self, date):
+        autoscale = self.settings.value('plot/autoscale', type=bool)
+        xmin = self.settings.value('plot/xmin', type=float)
+        xmax = self.settings.value('plot/xmax', type=float)
+        ymin = self.settings.value('plot/ymin', type=float)
+        ymax = self.settings.value('plot/ymax', type=float)
         timedelta = (date - self.starttime).total_seconds()
+
         for plotitem in self.plotitems:
             plotitem.add_data(timedelta, plotitem.dataitem.value)
-        self.ax1.relim()
-        self.ax1.autoscale()
-        self.ax1.autoscale_view()
+        if autoscale:
+            self.ax1.relim()
+            self.ax1.autoscale()
+            self.ax1.autoscale_view()
+            xmin, xmax = self.ax1.get_xlim()
+            self.settings.setValue('plot/xmin', float(xmin))
+            self.settings.setValue('plot/xmax', float(xmax))
+        else:
+            if not self.dirty:
+                self.ax1.set_xlim(xmin, xmax)
+                # self.ax1.set_ylim(ymin, ymax)
+                pass
         self.canvas.draw()
 
 

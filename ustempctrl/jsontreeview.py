@@ -6,8 +6,8 @@ from PyQt5.QtCore import QModelIndex, Qt, QAbstractItemModel, QMimeData, \
     QByteArray, QDataStream, QIODevice
 from PyQt5.QtWidgets import QTreeView, QApplication
 import sys
-from jsonwatch.jsonitem import JsonItem
-from jsonwatch.jsonnode import JsonNode
+from jsonwatch.jsonobject import JsonObject
+from jsonwatch.jsonvalue import JsonValue
 
 
 class Column():
@@ -17,7 +17,7 @@ class Column():
 
 
 class JsonDataModel(QAbstractItemModel):
-    def __init__(self, rootnode: JsonNode, parent=None):
+    def __init__(self, rootnode: JsonObject, parent=None):
         super().__init__(parent)
         self.root = rootnode
         self.root.child_added_callback = self.insert_row
@@ -55,7 +55,7 @@ class JsonDataModel(QAbstractItemModel):
             if self.columns[column].name == 'key':
                 return item.key
             elif self.columns[column].name == 'value':
-                if isinstance(item, JsonItem):
+                if isinstance(item, JsonValue):
                     return item.value
 
     def flags(self, index: QModelIndex):
@@ -132,7 +132,7 @@ class JsonDataModel(QAbstractItemModel):
 
 
 class JsonTreeView(QTreeView):
-    def __init__(self, rootnode: JsonNode, parent=None):
+    def __init__(self, rootnode: JsonObject, parent=None):
         super().__init__(parent)
         self.setModel(JsonDataModel(rootnode))
         self.setDragDropMode(QTreeView.DragDrop)

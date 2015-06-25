@@ -12,11 +12,12 @@ import json
 import functools
 
 import serial
-from PyQt5.QtWidgets import QApplication, QWidget, QGridLayout, QGroupBox, QVBoxLayout, \
+from PyQt5.QtWidgets import QApplication, QWidget, QGridLayout, \
     QAction, QDialog, QMainWindow, QMessageBox, QSplitter
-from PyQt5.QtCore import QTimer, QSettings, QCoreApplication
+from PyQt5.QtCore import QTimer, QSettings, QCoreApplication, Qt
 from serial.serialutil import SerialException
-from jsonwatch.jsonnode import JsonNode
+from jsonwatch.jsonobject import JsonObject
+from ustempctrl.plotsettings import PlotSettingsWidget
 
 from ustempctrl.settingswidget import CtrlSettingsWidget
 from ustempctrl.jsontreeview import JsonTreeView
@@ -31,9 +32,9 @@ class CtrlTestGui(QMainWindow):
         super().__init__(parent)
         self.counter = 0
         self.serial = None
-        self.rootnode = JsonNode('root')
-        self.rootnode.add_child(JsonNode('processdata'))
-        self.rootnode.add_child(JsonNode('settings'))
+        self.rootnode = JsonObject('root')
+        self.rootnode.add_child(JsonObject('processdata'))
+        self.rootnode.add_child(JsonObject('settings'))
 
         # Timer for periodic status update
         self.timer = QTimer()
@@ -41,13 +42,13 @@ class CtrlTestGui(QMainWindow):
         self.timer.timeout.connect(self.receive_serialdata)
 
         # Controller Settings
-        self.settingsWidget = None
-
+        self.settingsDialog = None
         # object explorer
         self.objectexplorer = JsonTreeView(self.rootnode['processdata'], self)
-
+        # plot settings
+        self.plotsettings = PlotSettingsWidget(self)
         # Plot Widget
-        self.plotWidget = PlotWidget(self.rootnode, self)
+        self.plot = PlotWidget(self.rootnode, self)
 
         # Actions
         # Serial Dialog
@@ -76,14 +77,19 @@ class CtrlTestGui(QMainWindow):
         self.extrasMenu = self.menuBar().addMenu(self.tr("Extras"))
         self.extrasMenu.addAction(self.settingsdlgAction)
 
-        # Splitter
-        self.splitter = QSplitter()
-        self.splitter.addWidget(self.objectexplorer)
-        self.splitter.addWidget(self.plotWidget)
+        # Vertical Splitter
+        self.vsplitter = QSplitter(Qt.Vertical)
+        self.vsplitter.addWidget(self.objectexplorer)
+        self.vsplitter.addWidget(self.plotsettings)
+
+        # Horizontal Splitter
+        self.hsplitter = QSplitter()
+        self.hsplitter.addWidget(self.vsplitter)
+        self.hsplitter.addWidget(self.plot)
 
         # Layout
         layout = QGridLayout()
-        layout.addWidget(self.splitter, 0, 0)
+        layout.addWidget(self.hsplitter, 0, 0)
         self.setCentralWidget(QWidget())
         self.centralWidget().setLayout(layout)
 
@@ -103,16 +109,17 @@ class CtrlTestGui(QMainWindow):
             try:
                 # get data from serial
                 buf = self.serial.readline().decode('utf-8')
-                node = JsonNode('root', buf)
+                print(buf.strip())
+                node = JsonObject('root', buf)
                 self.rootnode.update(node)
 
                 # refresh widgets
                 self.objectexplorer.refresh()
-                self.plotWidget.refresh(datetime.datetime.now())
+                self.plot.refresh(datetime.datetime.now())
 
-                if self.settingsWidget is not None:
+                if self.settingsDialog is not None:
                     if node.child_with_key('settings') is not None:
-                        self.settingsWidget.refresh()
+                        self.settingsDialog.refresh()
 
             except SerialException:
                 critical(
@@ -129,10 +136,10 @@ class CtrlTestGui(QMainWindow):
             settings.setValue("serial/port", dlg.port)
 
     def show_settingsdlg(self):
-        if self.settingsWidget is None:
-            self.settingsWidget = CtrlSettingsWidget(
+        if self.settingsDialog is None:
+            self.settingsDialog = CtrlSettingsWidget(
                 self.serial, self.rootnode['settings'], self)
-        self.settingsWidget.show()
+        self.settingsDialog.show()
 
     def toggle_connect(self):
         if self.serial is not None:
