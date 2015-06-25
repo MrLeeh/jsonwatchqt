@@ -8,13 +8,12 @@
 import datetime
 import sys
 import json
-import queue
-import threading
 
 import serial
 from PyQt5.QtWidgets import QApplication, QAction, QDialog, QMainWindow, QMessageBox, \
     QDockWidget, QLabel
-from PyQt5.QtCore import QTimer, QSettings, QCoreApplication, Qt, QThread
+from PyQt5.QtCore import QTimer, QSettings, QCoreApplication, Qt, QThread, \
+    pyqtSignal
 
 from serial.serialutil import SerialException
 
@@ -27,13 +26,29 @@ from ustempctrl.serialdialog import SerialDialog
 from ustempctrl.utilities import critical
 
 
-def read_serial(ser: serial.Serial, q: queue, stop_event: threading.Event):
-    utf8decode = lambda s: s.decode('utf-8')
-    strip = lambda s: s.strip()
+class SerialWorker(QThread):
+    data_received = pyqtSignal(str)
 
-    while not stop_event.is_set():
-        if ser.inWaiting():
-            q.put(strip(utf8decode(ser.readline())))
+    def __init__(self, ser: serial.Serial, parent=None):
+        super().__init__(parent)
+        self.serial = ser
+        self._quit = False
+
+    def run(self):
+        utf8decode = lambda s: s.decode('utf-8')
+        strip = lambda s: s.strip()
+
+        while not self._quit:
+            try:
+                if self.serial.isOpen() and self.serial.inWaiting():
+                    self.data_received.emit(
+                        strip(utf8decode(self.serial.readline()))
+                    )
+            except SerialException as e:
+                pass
+
+    def quit(self):
+        self._quit = True
 
 
 class CtrlTestGui(QMainWindow):
@@ -45,11 +60,6 @@ class CtrlTestGui(QMainWindow):
         self.rootnode = JsonObject('root')
         self.rootnode.add_child(JsonObject('processdata'))
         self.rootnode.add_child(JsonObject('settings'))
-
-        # Timer for periodic status update
-        self.timer = QTimer()
-        self.timer.setInterval(100)
-        self.timer.timeout.connect(self.receive_serialdata)
 
         # Controller Settings
         self.settingsDialog = None
@@ -112,8 +122,6 @@ class CtrlTestGui(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.plotsettingsDockWidget)
 
     def closeEvent(self, event):
-        self.stop_event.set()
-        self.timer.stop()
         try:
             self.serial.close()
         except (SerialException, AttributeError):
@@ -123,18 +131,17 @@ class CtrlTestGui(QMainWindow):
         jsonstring = json.dumps({"resetpid": 1})
         self.serial.write(bytearray(jsonstring, 'utf-8'))
 
-    def receive_serialdata(self):
-        while not self.queue.empty():
-            node = JsonObject('root', self.queue.get())
-            self.rootnode.update(node)
+    def receive_serialdata(self, data):
+        node = JsonObject('root', data)
+        self.rootnode.update(node)
 
-            # refresh widgets
-            self.objectexplorer.refresh()
-            self.plot.refresh(datetime.datetime.now())
+        # refresh widgets
+        self.objectexplorer.refresh()
+        self.plot.refresh(datetime.datetime.now())
 
-            if self.settingsDialog is not None:
-                if node.child_with_key('settings') is not None:
-                    self.settingsDialog.refresh()
+        if self.settingsDialog is not None:
+            if node.child_with_key('settings') is not None:
+                self.settingsDialog.refresh()
 
     def show_serialdlg(self):
         settings = QSettings()
@@ -184,13 +191,8 @@ class CtrlTestGui(QMainWindow):
                         "configured." % port)
             )
         else:
-            self.timer.start()
-            self.queue = queue.Queue()
-            self.stop_event = threading.Event()
-            self.worker = threading.Thread(
-                target=read_serial, args=(self.serial, self.queue,
-                                          self.stop_event)
-            )
+            self.worker = SerialWorker(self.serial, self)
+            self.worker.data_received.connect(self.receive_serialdata)
             self.worker.start()
 
             self.connectAction.setText(self.tr("Disconnect"))
@@ -198,8 +200,7 @@ class CtrlTestGui(QMainWindow):
             self.connectionstateLabel.setText(self.tr("Connected to %s") % port)
 
     def disconnect(self):
-        self.stop_event.set()
-        self.timer.stop()
+        self.worker.quit()
         self.serial.close()
         self.serial = None
         self.connectAction.setText(self.tr("Connect"))
