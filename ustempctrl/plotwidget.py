@@ -76,8 +76,8 @@ class PlotWidget(QWidget):
 
         # layout
         layout = QVBoxLayout()
-        layout.addWidget(self.canvas)
         layout.addWidget(self.toolbar)
+        layout.addWidget(self.canvas)
         self.setLayout(layout)
 
         self.setAcceptDrops(True)

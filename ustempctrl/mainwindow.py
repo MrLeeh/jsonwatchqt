@@ -6,24 +6,34 @@
 
 """
 import datetime
-from io import StringIO
 import sys
 import json
-import functools
+import queue
+import threading
 
 import serial
-from PyQt5.QtWidgets import QApplication, QWidget, QGridLayout, \
-    QAction, QDialog, QMainWindow, QMessageBox, QSplitter
-from PyQt5.QtCore import QTimer, QSettings, QCoreApplication, Qt
+from PyQt5.QtWidgets import QApplication, QAction, QDialog, QMainWindow, QMessageBox, \
+    QDockWidget, QLabel
+from PyQt5.QtCore import QTimer, QSettings, QCoreApplication, Qt, QThread
+
 from serial.serialutil import SerialException
+
 from jsonwatch.jsonobject import JsonObject
 from ustempctrl.plotsettings import PlotSettingsWidget
-
 from ustempctrl.settingswidget import CtrlSettingsWidget
 from ustempctrl.jsontreeview import JsonTreeView
 from ustempctrl.plotwidget import PlotWidget
 from ustempctrl.serialdialog import SerialDialog
 from ustempctrl.utilities import critical
+
+
+def read_serial(ser: serial.Serial, q: queue, stop_event: threading.Event):
+    utf8decode = lambda s: s.decode('utf-8')
+    strip = lambda s: s.strip()
+
+    while not stop_event.is_set():
+        if ser.inWaiting():
+            q.put(strip(utf8decode(ser.readline())))
 
 
 class CtrlTestGui(QMainWindow):
@@ -45,8 +55,20 @@ class CtrlTestGui(QMainWindow):
         self.settingsDialog = None
         # object explorer
         self.objectexplorer = JsonTreeView(self.rootnode['processdata'], self)
+        self.objectexplorerDockWidget = QDockWidget(
+            self.tr("object explorer"), self
+        )
+        self.objectexplorerDockWidget.setObjectName("objectexplorer_dockwidget")
+        self.objectexplorerDockWidget.setWidget(self.objectexplorer)
+
         # plot settings
         self.plotsettings = PlotSettingsWidget(self)
+        self.plotsettingsDockWidget = QDockWidget(
+            self.tr("plot settings"), self
+        )
+        self.plotsettingsDockWidget.setObjectName("plotsettings_dockwidget")
+        self.plotsettingsDockWidget.setWidget(self.plotsettings)
+
         # Plot Widget
         self.plot = PlotWidget(self.rootnode, self)
 
@@ -77,23 +99,20 @@ class CtrlTestGui(QMainWindow):
         self.extrasMenu = self.menuBar().addMenu(self.tr("Extras"))
         self.extrasMenu.addAction(self.settingsdlgAction)
 
-        # Vertical Splitter
-        self.vsplitter = QSplitter(Qt.Vertical)
-        self.vsplitter.addWidget(self.objectexplorer)
-        self.vsplitter.addWidget(self.plotsettings)
-
-        # Horizontal Splitter
-        self.hsplitter = QSplitter()
-        self.hsplitter.addWidget(self.vsplitter)
-        self.hsplitter.addWidget(self.plot)
+        # StatusBar
+        statusbar = self.statusBar()
+        statusbar.setVisible(True)
+        self.connectionstateLabel = QLabel(self.tr("Not connected"))
+        statusbar.addPermanentWidget(self.connectionstateLabel)
+        statusbar.showMessage(self.tr("Ready"))
 
         # Layout
-        layout = QGridLayout()
-        layout.addWidget(self.hsplitter, 0, 0)
-        self.setCentralWidget(QWidget())
-        self.centralWidget().setLayout(layout)
+        self.setCentralWidget(self.plot)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.objectexplorerDockWidget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.plotsettingsDockWidget)
 
     def closeEvent(self, event):
+        self.stop_event.set()
         self.timer.stop()
         try:
             self.serial.close()
@@ -105,27 +124,17 @@ class CtrlTestGui(QMainWindow):
         self.serial.write(bytearray(jsonstring, 'utf-8'))
 
     def receive_serialdata(self):
-        if self.serial.inWaiting():
-            try:
-                # get data from serial
-                buf = self.serial.readline().decode('utf-8')
-                print(buf.strip())
-                node = JsonObject('root', buf)
-                self.rootnode.update(node)
+        while not self.queue.empty():
+            node = JsonObject('root', self.queue.get())
+            self.rootnode.update(node)
 
-                # refresh widgets
-                self.objectexplorer.refresh()
-                self.plot.refresh(datetime.datetime.now())
+            # refresh widgets
+            self.objectexplorer.refresh()
+            self.plot.refresh(datetime.datetime.now())
 
-                if self.settingsDialog is not None:
-                    if node.child_with_key('settings') is not None:
-                        self.settingsDialog.refresh()
-
-            except SerialException:
-                critical(
-                    self, self.tr("Error receiving status from Controller.")
-                )
-                self.disconnect()
+            if self.settingsDialog is not None:
+                if node.child_with_key('settings') is not None:
+                    self.settingsDialog.refresh()
 
     def show_serialdlg(self):
         settings = QSettings()
@@ -176,15 +185,26 @@ class CtrlTestGui(QMainWindow):
             )
         else:
             self.timer.start()
+            self.queue = queue.Queue()
+            self.stop_event = threading.Event()
+            self.worker = threading.Thread(
+                target=read_serial, args=(self.serial, self.queue,
+                                          self.stop_event)
+            )
+            self.worker.start()
+
             self.connectAction.setText(self.tr("Disconnect"))
             self.serialdlgAction.setEnabled(False)
+            self.connectionstateLabel.setText(self.tr("Connected to %s") % port)
 
     def disconnect(self):
+        self.stop_event.set()
         self.timer.stop()
         self.serial.close()
         self.serial = None
         self.connectAction.setText(self.tr("Connect"))
         self.serialdlgAction.setEnabled(True)
+        self.connectionstateLabel.setText(self.tr("Not connected"))
 
 
 if __name__ == "__main__":
