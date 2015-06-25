@@ -4,10 +4,20 @@
 """
 from PyQt5.QtCore import QModelIndex, Qt, QAbstractItemModel, QMimeData, \
     QByteArray, QDataStream, QIODevice
-from PyQt5.QtWidgets import QTreeView, QApplication
+from PyQt5.QtWidgets import QTreeView, QApplication, QItemDelegate
 import sys
+import re
+
+import serial
 from jsonwatch.jsonobject import JsonObject
 from jsonwatch.jsonvalue import JsonValue
+
+
+utf8_to_bytearray = lambda x: bytearray(x, 'utf-8')
+
+
+def extract_number(s: str):
+    return float(re.findall('([-+]?[\d.]+)', s)[0])
 
 
 class Column():
@@ -16,13 +26,30 @@ class Column():
         self.label = label or name
 
 
+class MyItemDelegate(QItemDelegate):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.update = False
+
+    def createEditor(self, widget, options, index):
+        self.update = True
+        return super().createEditor(widget, options, index)
+
+    def setEditorData(self, widget, index):
+        if self.update:
+            self.update = False
+            return super().setEditorData(widget, index)
+
+
 class JsonDataModel(QAbstractItemModel):
-    def __init__(self, rootnode: JsonObject, parent=None):
+    def __init__(self, rootnode: JsonObject, ser: serial.Serial, parent=None):
         super().__init__(parent)
         self.root = rootnode
+        self.serial = ser
         self.root.child_added_callback = self.insert_row
         self.columns = [
             Column('key'),
+            Column('name'),
             Column('value')
         ]
 
@@ -48,15 +75,34 @@ class JsonDataModel(QAbstractItemModel):
         if not index.isValid():
             return
 
-        if role == Qt.DisplayRole:
-            parent_node = self.node_from_index(index.parent())
-            item = parent_node.child_at(index.row())
-            column = index.column()
-            if self.columns[column].name == 'key':
+        if role in (Qt.DisplayRole, Qt.EditRole):
+            item = index.internalPointer()
+            column = self.columns[index.column()]
+            if column.name == 'key':
                 return item.key
-            elif self.columns[column].name == 'value':
+            if column.name == 'name':
+                return item.name
+            elif column.name == 'value':
                 if isinstance(item, JsonValue):
-                    return item.value
+                    if item.value is None:
+                        return "-"
+                    else:
+                        return item.value_str() + ' ' + item.unit
+
+    def setData(self, index:QModelIndex, value, role=Qt.EditRole):
+        if not index.isValid():
+            return False
+
+        if role == Qt.EditRole:
+            node = index.internalPointer()
+            if isinstance(node, JsonValue):
+                if self.serial.isOpen():
+                    node.value = extract_number(value)
+                    s = '{"%s": %i}\n' % (node.key, node._raw_value)
+                    print(s.strip())
+                    self.serial.write(utf8_to_bytearray(s))
+                    return True
+        return False
 
     def flags(self, index: QModelIndex):
         flags = Qt.NoItemFlags | Qt.ItemIsDragEnabled | Qt.ItemIsSelectable
@@ -64,6 +110,9 @@ class JsonDataModel(QAbstractItemModel):
             node = self.node_from_index(index)
             if node.latest:
                 flags |= Qt.ItemIsEnabled
+            if isinstance(node, JsonValue):
+                if not node.readonly:
+                    flags |= Qt.ItemIsEditable
         return flags
 
     def mimeTypes(self):
@@ -84,7 +133,7 @@ class JsonDataModel(QAbstractItemModel):
         return mimedata
 
     def columnCount(self, parent=QModelIndex()):
-        return 2
+        return len(self.columns)
 
     def rowCount(self, parent=QModelIndex()):
         node = self.node_from_index(parent)
@@ -132,9 +181,10 @@ class JsonDataModel(QAbstractItemModel):
 
 
 class JsonTreeView(QTreeView):
-    def __init__(self, rootnode: JsonObject, parent=None):
+    def __init__(self, rootnode: JsonObject, ser: serial.Serial, parent=None):
         super().__init__(parent)
-        self.setModel(JsonDataModel(rootnode))
+        self.setModel(JsonDataModel(rootnode, ser))
+        self.setItemDelegate(MyItemDelegate())
         self.setDragDropMode(QTreeView.DragDrop)
         self.setDragEnabled(True)
         self.setAcceptDrops(True)

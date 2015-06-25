@@ -18,6 +18,7 @@ from PyQt5.QtCore import QTimer, QSettings, QCoreApplication, Qt, QThread, \
 from serial.serialutil import SerialException
 
 from jsonwatch.jsonobject import JsonObject
+from jsonwatch.jsonvalue import JsonValue
 from ustempctrl.plotsettings import PlotSettingsWidget
 from ustempctrl.settingswidget import CtrlSettingsWidget
 from ustempctrl.jsontreeview import JsonTreeView
@@ -56,7 +57,7 @@ class CtrlTestGui(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.counter = 0
-        self.serial = None
+        self.serial = serial.Serial()
         self.rootnode = JsonObject('root')
         self.rootnode.add_child(JsonObject('processdata'))
         self.rootnode.add_child(JsonObject('settings'))
@@ -64,7 +65,7 @@ class CtrlTestGui(QMainWindow):
         # Controller Settings
         self.settingsDialog = None
         # object explorer
-        self.objectexplorer = JsonTreeView(self.rootnode['processdata'], self)
+        self.objectexplorer = JsonTreeView(self.rootnode, self.serial, self)
         self.objectexplorerDockWidget = QDockWidget(
             self.tr("object explorer"), self
         )
@@ -121,11 +122,33 @@ class CtrlTestGui(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.objectexplorerDockWidget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.plotsettingsDockWidget)
 
+        self.init_jsonobjects()
+
     def closeEvent(self, event):
         try:
             self.serial.close()
         except (SerialException, AttributeError):
             pass
+
+    def init_jsonobjects(self):
+        pd_node = self.rootnode['processdata']
+
+        pd_node.add_child(
+            JsonValue('in', name="Actual Temperature", unit="°C",
+                      numerator=10, decimals=1, readonly=False)
+        )
+
+        pd_node.add_child(
+            JsonValue('kp', numerator=10, readonly=False, decimals=1)
+        )
+
+        pd_node.add_child(
+            JsonValue('ki', numerator=10, readonly=False, decimals=1)
+        )
+
+        pd_node.add_child(
+            JsonValue('y', numerator=10, unit="%", decimals=1)
+        )
 
     def send_reset(self):
         jsonstring = json.dumps({"resetpid": 1})
@@ -158,7 +181,7 @@ class CtrlTestGui(QMainWindow):
         self.settingsDialog.show()
 
     def toggle_connect(self):
-        if self.serial is not None:
+        if self.serial.isOpen():
             self.disconnect()
         else:
             self.connect()
@@ -176,8 +199,9 @@ class CtrlTestGui(QMainWindow):
 
         # Serial connection
         try:
-            self.serial = serial.Serial(port)
-            self.serial.baudrate = 9600
+            self.serial.setPort(port)
+            self.serial.setBaudrate(9600)
+            self.serial.open()
         except ValueError:
             QMessageBox.critical(
                 self, QCoreApplication.applicationName(),
@@ -202,7 +226,6 @@ class CtrlTestGui(QMainWindow):
     def disconnect(self):
         self.worker.quit()
         self.serial.close()
-        self.serial = None
         self.connectAction.setText(self.tr("Connect"))
         self.serialdlgAction.setEnabled(True)
         self.connectionstateLabel.setText(self.tr("Not connected"))
