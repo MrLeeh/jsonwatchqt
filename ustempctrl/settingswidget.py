@@ -4,15 +4,15 @@ from PyQt5.QtWidgets import QWidget, QLabel, QGridLayout, QApplication, \
     QPushButton, QDialog, QCheckBox
 import sys
 from serial.serialutil import SerialException
-from jsonwatch.jsonobject import JsonObject
-from jsonwatch.jsonvalue import JsonValue
+from jsonwatch.jsonnode import JsonNode
+from jsonwatch.jsonitem import JsonItem
 from ustempctrl.jsonmapper import JsonMapper
 from ustempctrl.miscwidgets import MySpinBox
 from ustempctrl.utilities import critical
 
 
 class CtrlSettingsWidget(QDialog):
-    def __init__(self, serial, rootnode: JsonObject, parent=None):
+    def __init__(self, serial, rootnode: JsonNode, parent=None):
         super().__init__(parent)
         self.serial = serial
         self.rootnode = rootnode
@@ -88,10 +88,10 @@ class CtrlSettingsWidget(QDialog):
 
     def request_settings(self):
         # send request for setting data
-        node = JsonObject('root')
-        node.add_child(JsonValue('send_settings', 1))
+        node = JsonNode('root')
+        node.add_child(JsonItem('send_settings', 1))
         try:
-            self.serial.write(bytearray(node.to_json(), 'utf-8'))
+            self.serial.write(bytearray(node.values_to_json(), 'utf-8'))
         except AttributeError as e:
             critical(self.parent(), self.tr("Serial Port is not open."))
 
@@ -101,7 +101,7 @@ class CtrlSettingsWidget(QDialog):
     def send_settings(self, *argv):
         self.mapper.map_to_node()
         try:
-            self.serial.write(bytearray(self.rootnode.to_json(), 'utf-8'))
+            self.serial.write(bytearray(self.rootnode.values_to_json(), 'utf-8'))
         except (AttributeError, SerialException) as e:
             critical(self.parent(), self.tr("Serial Port is not open."))
 

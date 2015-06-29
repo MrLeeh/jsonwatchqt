@@ -9,8 +9,8 @@ import sys
 import re
 
 import serial
-from jsonwatch.jsonobject import JsonObject
-from jsonwatch.jsonvalue import JsonValue
+from jsonwatch.jsonnode import JsonNode
+from jsonwatch.jsonitem import JsonItem
 
 
 utf8_to_bytearray = lambda x: bytearray(x, 'utf-8')
@@ -42,7 +42,7 @@ class MyItemDelegate(QItemDelegate):
 
 
 class JsonDataModel(QAbstractItemModel):
-    def __init__(self, rootnode: JsonObject, ser: serial.Serial, parent=None):
+    def __init__(self, rootnode: JsonNode, ser: serial.Serial, parent=None):
         super().__init__(parent)
         self.root = rootnode
         self.serial = ser
@@ -55,7 +55,7 @@ class JsonDataModel(QAbstractItemModel):
 
     def index(self, row, column, parent=QModelIndex()):
         parent_node = self.node_from_index(parent)
-        return self.createIndex(row, column, parent_node.child_at(row))
+        return self.createIndex(row, column, parent_node.item_at(row))
 
     def parent(self, index=QModelIndex()):
         node = self.node_from_index(index)
@@ -83,7 +83,7 @@ class JsonDataModel(QAbstractItemModel):
             if column.name == 'name':
                 return item.name
             elif column.name == 'value':
-                if isinstance(item, JsonValue):
+                if isinstance(item, JsonItem):
                     if item.value is None:
                         return "-"
                     else:
@@ -95,7 +95,7 @@ class JsonDataModel(QAbstractItemModel):
 
         if role == Qt.EditRole:
             node = index.internalPointer()
-            if isinstance(node, JsonValue):
+            if isinstance(node, JsonItem):
                 if self.serial.isOpen():
                     node.value = extract_number(value)
                     s = '{"%s": %i}\n' % (node.key, node._raw_value)
@@ -110,8 +110,8 @@ class JsonDataModel(QAbstractItemModel):
             node = self.node_from_index(index)
             if node.latest:
                 flags |= Qt.ItemIsEnabled
-            if isinstance(node, JsonValue):
-                if not node.readonly:
+            if isinstance(node, JsonItem):
+                if self.columns[index.column()].name == "value" and not node.readonly:
                     flags |= Qt.ItemIsEditable
         return flags
 
@@ -181,7 +181,7 @@ class JsonDataModel(QAbstractItemModel):
 
 
 class JsonTreeView(QTreeView):
-    def __init__(self, rootnode: JsonObject, ser: serial.Serial, parent=None):
+    def __init__(self, rootnode: JsonNode, ser: serial.Serial, parent=None):
         super().__init__(parent)
         self.setModel(JsonDataModel(rootnode, ser))
         self.setItemDelegate(MyItemDelegate())

@@ -9,7 +9,7 @@ from PyQt5.QtCore import QByteArray, QIODevice, QDataStream, QSettings
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QApplication
 from pyqtconfig.config import QSettingsManager
-from jsonwatch.jsonobject import JsonObject
+from jsonwatch.jsonnode import JsonNode
 
 os.environ['QT_API'] = 'pyqt5'
 
@@ -57,9 +57,9 @@ class MyCanvas(FigureCanvas):
 
 
 class PlotWidget(QWidget):
-    def __init__(self, rootnode: JsonObject, parent=None):
+    def __init__(self, rootnode: JsonNode, settings, parent=None):
         super().__init__(parent)
-        self.settings = QSettings()
+        self.settings = settings
         self.rootnode = rootnode
         self.plotitems = []
         self.starttime = datetime.datetime.now()
@@ -70,6 +70,9 @@ class PlotWidget(QWidget):
         self.canvas = MyCanvas(self.fig, self)
         self.canvas.setParent(self)
         self.ax1 = self.fig.add_subplot(111)
+        self.ax1.grid()
+        self.ax1.callbacks.connect('xlim_changed', self.plotlim_changed)
+        self.ax1.callbacks.connect('ylim_changed', self.plotlim_changed)
 
         # navigation toolbar
         self.toolbar = NavigationToolbar(self.canvas, self)
@@ -83,7 +86,7 @@ class PlotWidget(QWidget):
         self.setAcceptDrops(True)
 
     def add_plot(self, path):
-        item = self.rootnode.child_from_path(path)
+        item = self.rootnode.item_from_path(path)
         if item is None or item in (pi.dataitem for pi in self.plotitems):
             return
 
@@ -99,28 +102,33 @@ class PlotWidget(QWidget):
         self.canvas.draw()
 
     def refresh(self, date):
-        autoscale = self.settings.value('plot/autoscale', type=bool)
-        xmin = self.settings.value('plot/xmin', type=float)
-        xmax = self.settings.value('plot/xmax', type=float)
-        ymin = self.settings.value('plot/ymin', type=float)
-        ymax = self.settings.value('plot/ymax', type=float)
+
+        autoscale = dict(self.settings.get('plot/autoscaleoption'))
         timedelta = (date - self.starttime).total_seconds()
 
         for plotitem in self.plotitems:
             plotitem.add_data(timedelta, plotitem.dataitem.value)
-        if autoscale:
+
+        if autoscale[0]: # complete autoscale
             self.ax1.relim()
             self.ax1.autoscale()
             self.ax1.autoscale_view()
+        elif autoscale[1]: # autoscrolle x axis
             xmin, xmax = self.ax1.get_xlim()
-            self.settings.setValue('plot/xmin', float(xmin))
-            self.settings.setValue('plot/xmax', float(xmax))
-        else:
-            if not self.dirty:
-                self.ax1.set_xlim(xmin, xmax)
-                # self.ax1.set_ylim(ymin, ymax)
-                pass
+            delta = xmax - xmin
+            xmax = timedelta + 0.1 * delta
+            xmin = xmax - delta
+            self.ax1.set_xlim(xmin, xmax)
+
         self.canvas.draw()
+
+    def plotlim_changed(self, *args, **kwargs):
+        xmin, xmax = self.ax1.get_xlim()
+        ymin, ymax = self.ax1.get_ylim()
+        self.settings.set('plot/xmin', float(xmin))
+        self.settings.set('plot/xmax', float(xmax))
+        self.settings.set('plot/ymin', float(ymin))
+        self.settings.set('plot/ymax', float(ymax))
 
 
 if __name__ == "__main__":

@@ -2,8 +2,8 @@
     Copyright © 2015 by Stefan Lehmann
 
 """
-from jsonwatch.jsonobject import JsonObject
-from jsonwatch.jsonvalue import JsonValue
+from jsonwatch.jsonnode import JsonNode
+from jsonwatch.jsonitem import JsonItem
 
 
 class MapItem:
@@ -15,7 +15,7 @@ class MapItem:
 
 
 class JsonMapper:
-    def __init__(self, node: JsonObject):
+    def __init__(self, node: JsonNode):
         self.mappings = []
         self.node = node
 
@@ -37,7 +37,7 @@ class JsonMapper:
             try:
                 jsonvalue = self.node[item.key]
             except KeyError:
-                jsonvalue = JsonValue(item.key)
+                jsonvalue = JsonItem(item.key)
                 self.node.add_child(jsonvalue)
             jsonvalue.value = fget()
-        print(self.node.to_json())
+        print(self.node.values_to_json())

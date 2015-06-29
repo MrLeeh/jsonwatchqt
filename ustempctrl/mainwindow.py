@@ -17,8 +17,9 @@ from PyQt5.QtCore import QTimer, QSettings, QCoreApplication, Qt, QThread, \
 
 from serial.serialutil import SerialException
 
-from jsonwatch.jsonobject import JsonObject
-from jsonwatch.jsonvalue import JsonValue
+from jsonwatch.jsonnode import JsonNode
+from jsonwatch.jsonitem import JsonItem
+from pyqtconfig.config import QSettingsManager
 from ustempctrl.plotsettings import PlotSettingsWidget
 from ustempctrl.settingswidget import CtrlSettingsWidget
 from ustempctrl.jsontreeview import JsonTreeView
@@ -58,9 +59,8 @@ class CtrlTestGui(QMainWindow):
         super().__init__(parent)
         self.counter = 0
         self.serial = serial.Serial()
-        self.rootnode = JsonObject('root')
-        self.rootnode.add_child(JsonObject('processdata'))
-        self.rootnode.add_child(JsonObject('settings'))
+        self.rootnode = JsonNode('root')
+        self.settings = QSettingsManager()
 
         # Controller Settings
         self.settingsDialog = None
@@ -73,7 +73,7 @@ class CtrlTestGui(QMainWindow):
         self.objectexplorerDockWidget.setWidget(self.objectexplorer)
 
         # plot settings
-        self.plotsettings = PlotSettingsWidget(self)
+        self.plotsettings = PlotSettingsWidget(self.settings, self)
         self.plotsettingsDockWidget = QDockWidget(
             self.tr("plot settings"), self
         )
@@ -81,7 +81,7 @@ class CtrlTestGui(QMainWindow):
         self.plotsettingsDockWidget.setWidget(self.plotsettings)
 
         # Plot Widget
-        self.plot = PlotWidget(self.rootnode, self)
+        self.plot = PlotWidget(self.rootnode, self.settings, self)
 
         # Actions
         # Serial Dialog
@@ -131,39 +131,25 @@ class CtrlTestGui(QMainWindow):
             pass
 
     def init_jsonobjects(self):
-        pd_node = self.rootnode['processdata']
+        decode = lambda x: x.decode('utf-8')
+        read = lambda x: x.read()
 
-        pd_node.add_child(
-            JsonValue('in', name="Actual Temperature", unit="°C",
-                      numerator=10, decimals=1, readonly=False)
-        )
-
-        pd_node.add_child(
-            JsonValue('kp', numerator=10, readonly=False, decimals=1)
-        )
-
-        pd_node.add_child(
-            JsonValue('ki', numerator=10, readonly=False, decimals=1)
-        )
-
-        pd_node.add_child(
-            JsonValue('y', numerator=10, unit="%", decimals=1)
-        )
+        with open("c:/Users/Lehmann/data/python34/jsonwatch/tests/mycfg.json", 'rb') as f:
+            self.rootnode.load(decode(read(f)))
 
     def send_reset(self):
         jsonstring = json.dumps({"resetpid": 1})
         self.serial.write(bytearray(jsonstring, 'utf-8'))
 
     def receive_serialdata(self, data):
-        node = JsonObject('root', data)
-        self.rootnode.update(node)
+        self.rootnode.values_from_json(data)
 
         # refresh widgets
         self.objectexplorer.refresh()
         self.plot.refresh(datetime.datetime.now())
 
         if self.settingsDialog is not None:
-            if node.child_with_key('settings') is not None:
+            if node.item_with_key('settings') is not None:
                 self.settingsDialog.refresh()
 
     def show_serialdlg(self):
