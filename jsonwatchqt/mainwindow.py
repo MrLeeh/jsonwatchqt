@@ -20,12 +20,12 @@ from serial.serialutil import SerialException
 from jsonwatch.jsonnode import JsonNode
 from jsonwatch.jsonitem import JsonItem
 from pyqtconfig.config import QSettingsManager
-from ustempctrl.plotsettings import PlotSettingsWidget
-from ustempctrl.settingswidget import CtrlSettingsWidget
-from ustempctrl.jsontreeview import JsonTreeView
-from ustempctrl.plotwidget import PlotWidget
-from ustempctrl.serialdialog import SerialDialog
-from ustempctrl.utilities import critical
+from jsonwatchqt.plotsettings import PlotSettingsWidget
+from jsonwatchqt.settingswidget import CtrlSettingsWidget
+from jsonwatchqt.jsontreeview import JsonTreeView
+from jsonwatchqt.plotwidget import PlotWidget
+from jsonwatchqt.serialdialog import SerialDialog
+from jsonwatchqt.utilities import critical
 
 
 class SerialWorker(QThread):

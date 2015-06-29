@@ -6,9 +6,9 @@ import sys
 from serial.serialutil import SerialException
 from jsonwatch.jsonnode import JsonNode
 from jsonwatch.jsonitem import JsonItem
-from ustempctrl.jsonmapper import JsonMapper
-from ustempctrl.miscwidgets import MySpinBox
-from ustempctrl.utilities import critical
+from jsonwatchqt.jsonmapper import JsonMapper
+from jsonwatchqt.miscwidgets import MySpinBox
+from jsonwatchqt.utilities import critical
 
 
 class CtrlSettingsWidget(QDialog):
