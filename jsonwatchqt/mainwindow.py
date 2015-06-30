@@ -6,26 +6,28 @@
 
 """
 import datetime
-import sys
+import logging
 import json
 
 import serial
-from PyQt5.QtWidgets import QApplication, QAction, QDialog, QMainWindow, QMessageBox, \
+from PyQt5.QtWidgets import QAction, QDialog, QMainWindow, QMessageBox, \
     QDockWidget, QLabel
-from PyQt5.QtCore import QTimer, QSettings, QCoreApplication, Qt, QThread, \
+from PyQt5.QtCore import QSettings, QCoreApplication, Qt, QThread, \
     pyqtSignal
 
 from serial.serialutil import SerialException
 
 from jsonwatch.jsonnode import JsonNode
-from jsonwatch.jsonitem import JsonItem
+from jsonwatchqt.logger import LoggingWidget
 from pyqtconfig.config import QSettingsManager
 from jsonwatchqt.plotsettings import PlotSettingsWidget
 from jsonwatchqt.settingswidget import CtrlSettingsWidget
 from jsonwatchqt.jsontreeview import JsonTreeView
 from jsonwatchqt.plotwidget import PlotWidget
 from jsonwatchqt.serialdialog import SerialDialog
-from jsonwatchqt.utilities import critical
+
+
+logger = logging.getLogger("jsonwatchqt.mainwindow")
 
 
 class SerialWorker(QThread):
@@ -53,7 +55,7 @@ class SerialWorker(QThread):
         self._quit = True
 
 
-class CtrlTestGui(QMainWindow):
+class MainWindow(QMainWindow):
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -79,6 +81,14 @@ class CtrlTestGui(QMainWindow):
         )
         self.plotsettingsDockWidget.setObjectName("plotsettings_dockwidget")
         self.plotsettingsDockWidget.setWidget(self.plotsettings)
+
+        # log widget
+        self.loggingWidget = LoggingWidget(self)
+        self.loggingDockWidget = QDockWidget(
+            self.tr("logger"), self
+        )
+        self.loggingDockWidget.setObjectName("logging_dockwidget")
+        self.loggingDockWidget.setWidget(self.loggingWidget)
 
         # Plot Widget
         self.plot = PlotWidget(self.rootnode, self.settings, self)
@@ -107,8 +117,14 @@ class CtrlTestGui(QMainWindow):
         self.fileMenu.addSeparator()
         self.fileMenu.addAction(self.quitAction)
 
+        self.viewMenu = self.menuBar().addMenu(self.tr("View"))
+        self.viewMenu.addAction(self.objectexplorerDockWidget.toggleViewAction())
+        self.viewMenu.addAction(self.plotsettingsDockWidget.toggleViewAction())
+        self.viewMenu.addAction(self.loggingDockWidget.toggleViewAction())
+
         self.extrasMenu = self.menuBar().addMenu(self.tr("Extras"))
         self.extrasMenu.addAction(self.settingsdlgAction)
+
 
         # StatusBar
         statusbar = self.statusBar()
@@ -121,10 +137,28 @@ class CtrlTestGui(QMainWindow):
         self.setCentralWidget(self.plot)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.objectexplorerDockWidget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.plotsettingsDockWidget)
-
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.loggingDockWidget)
         self.init_jsonobjects()
 
+        self.load_settings()
+
+    def load_settings(self):
+        try:
+            self.restoreState(self.settings.get("windowState"))
+        except TypeError:
+            logger.debug("error restoring window state")
+
+        try:
+            self.restoreGeometry(self.settings.get("windowGeometry"))
+        except TypeError:
+            logger.debug("error restoring window geometry")
+
+    def save_settings(self):
+        self.settings.set("windowState", self.saveState())
+        self.settings.set("windowGeometry", self.saveGeometry())
+
     def closeEvent(self, event):
+        self.save_settings()
         try:
             self.serial.close()
         except (SerialException, AttributeError):
@@ -142,15 +176,12 @@ class CtrlTestGui(QMainWindow):
         self.serial.write(bytearray(jsonstring, 'utf-8'))
 
     def receive_serialdata(self, data):
+        self.loggingWidget.log(data)
         self.rootnode.values_from_json(data)
 
         # refresh widgets
         self.objectexplorer.refresh()
         self.plot.refresh(datetime.datetime.now())
-
-        if self.settingsDialog is not None:
-            if node.item_with_key('settings') is not None:
-                self.settingsDialog.refresh()
 
     def show_serialdlg(self):
         settings = QSettings()
@@ -215,18 +246,4 @@ class CtrlTestGui(QMainWindow):
         self.connectAction.setText(self.tr("Connect"))
         self.serialdlgAction.setEnabled(True)
         self.connectionstateLabel.setText(self.tr("Not connected"))
-
-
-if __name__ == "__main__":
-
-    # Config Application
-    app = QApplication(sys.argv)
-    QCoreApplication.setOrganizationName("KUZ")
-    QCoreApplication.setOrganizationDomain("http://www.kuz-leipzig.de")
-    QCoreApplication.setApplicationName("USTempCtrl GUI")
-
-    # Open Mainwindow
-    w = CtrlTestGui()
-    w.show()
-    app.exec_()
 
