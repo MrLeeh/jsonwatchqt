@@ -4,10 +4,46 @@
 
 """
 import sys
+import glob
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QComboBox, \
     QGridLayout, QDialogButtonBox
 import serial.tools.list_ports
+import serial
+
+
+def serial_ports():
+    """Lists serial ports
+
+    :raises EnvironmentError:
+        On unsupported or unknown platforms
+    :returns:
+        A list of available serial ports
+    """
+    if sys.platform.startswith('win'):
+        ports = ['COM' + str(i + 1) for i in range(256)]
+
+    elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
+        # this is to exclude your current terminal "/dev/tty"
+        ports = glob.glob('/dev/tty[A-Za-z]*')
+
+    elif sys.platform.startswith('darwin'):
+        ports = glob.glob('/dev/tty.*')
+
+    else:
+        raise EnvironmentError('Unsupported platform')
+
+    result = []
+    for port in ports:
+        try:
+            s = serial.Serial(port)
+            s.close()
+            result.append(port)
+        except (OSError, serial.SerialException):
+            pass
+    return result
+
 
 
 class COMPort():
@@ -56,28 +92,20 @@ class SerialDialog(QDialog):
         self.setWindowTitle(self.tr("Serial Settings"))
 
     def refresh_comports(self, combobox):
-        def create_comportobjects():
-            comports = serial.tools.list_ports.comports()
-            for port in sorted(comports):
-                portobj = COMPort(port)
-                yield portobj
-
-        self.serialports = list(create_comportobjects())
+        self.serialports = serial_ports()
         for port in self.serialports:
-            item = combobox.addItem(port.label, port.name)
+            item = combobox.addItem(port)
 
     @property
     def port(self):
-        portname = self.portComboBox.currentData()
-        ports = [port for port in self.serialports if port.name == portname]
-        if len(ports):
-            return ports[0].name
+        return self.portComboBox.currentText()
 
     @port.setter
     def port(self, value):
-        ports = [port for port in self.serialports if port.name == value]
-        if len(ports):
-            self.portComboBox.setCurrentText(ports[0].label)
+        if value in self.serialports:
+            self.portComboBox.setCurrentText(value)
+        else:
+            raise ValueError("serial port '%s' not available" % value)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

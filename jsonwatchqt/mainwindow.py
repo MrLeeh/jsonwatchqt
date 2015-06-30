@@ -184,8 +184,8 @@ class MainWindow(QMainWindow):
         decode = lambda x: x.decode('utf-8')
         read = lambda x: x.read()
 
-        with open("c:/Users/Lehmann/data/python34/jsonwatch/tests/mycfg.json", 'rb') as f:
-            self.rootnode.load(decode(read(f)))
+        # with open("c:/Users/Lehmann/data/python34/jsonwatch/tests/mycfg.json", 'rb') as f:
+        #     self.rootnode.load(decode(read(f)))
 
     def send_reset(self):
         jsonstring = json.dumps({"resetpid": 1})
@@ -209,7 +209,11 @@ class MainWindow(QMainWindow):
     def show_serialdlg(self):
         settings = QSettings()
         dlg = SerialDialog(self)
-        dlg.port = settings.value("serial/port")
+        try:
+            dlg.port = settings.value("serial/port")
+        except ValueError:
+            pass
+
         if dlg.exec_() == QDialog.Accepted:
 
             settings.setValue("serial/port", dlg.port)
