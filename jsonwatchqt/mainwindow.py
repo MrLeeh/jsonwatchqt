@@ -22,7 +22,7 @@ from jsonwatchqt.logger import LoggingWidget
 from pyqtconfig.config import QSettingsManager
 from jsonwatchqt.plotsettings import PlotSettingsWidget
 from jsonwatchqt.settingswidget import CtrlSettingsWidget
-from jsonwatchqt.jsontreeview import JsonTreeView
+from jsonwatchqt.objectexplorer import ObjectExplorer
 from jsonwatchqt.plotwidget import PlotWidget
 from jsonwatchqt.serialdialog import SerialDialog
 
@@ -67,7 +67,7 @@ class MainWindow(QMainWindow):
         # Controller Settings
         self.settingsDialog = None
         # object explorer
-        self.objectexplorer = JsonTreeView(self.rootnode, self.serial, self)
+        self.objectexplorer = ObjectExplorer(self.rootnode, self.serial, self)
         self.objectexplorerDockWidget = QDockWidget(
             self.tr("object explorer"), self
         )

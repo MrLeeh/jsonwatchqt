@@ -180,7 +180,7 @@ class JsonDataModel(QAbstractItemModel):
         self.endInsertRows()
 
 
-class JsonTreeView(QTreeView):
+class ObjectExplorer(QTreeView):
     def __init__(self, rootnode: JsonNode, ser: serial.Serial, parent=None):
         super().__init__(parent)
         self.setModel(JsonDataModel(rootnode, ser))
@@ -196,7 +196,7 @@ class JsonTreeView(QTreeView):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    w = JsonTreeView()
+    w = ObjectExplorer()
     jsonstr = '''
     {
         "item2": 3,
