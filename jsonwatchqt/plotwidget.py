@@ -86,7 +86,7 @@ class PlotWidget(QWidget):
         self.setAcceptDrops(True)
 
     def add_plot(self, path):
-        item = self.rootnode.item_from_path(path)
+        item = self.rootnode.item_from_path(path.split('/'))
         if item is None or item in (pi.dataitem for pi in self.plotitems):
             return
 
