@@ -2,9 +2,11 @@
     Copyright © 2015 by Stefan Lehmann
 
 """
+
 from PyQt5.QtCore import QModelIndex, Qt, QAbstractItemModel, QMimeData, \
     QByteArray, QDataStream, QIODevice
-from PyQt5.QtWidgets import QTreeView, QApplication, QItemDelegate
+from PyQt5.QtWidgets import QTreeView, QApplication, QItemDelegate, QSpinBox, \
+    QDoubleSpinBox, QCheckBox
 import sys
 import re
 
@@ -30,15 +32,48 @@ class MyItemDelegate(QItemDelegate):
         super().__init__(*args, **kwargs)
         self.update = False
 
-    def createEditor(self, widget, options, index):
+    def createEditor(self, parent, options, index):
         self.update = True
-        return super().createEditor(widget, options, index)
+        node = index.internalPointer()
+        if isinstance(node, JsonItem):
+            if node.type == int:
+                editor = QSpinBox(parent)
+                editor.setSuffix(node.unit or "")
+                editor.setRange(node.min or -sys.maxsize,
+                                node.max or sys.maxsize)
+                editor.setGeometry(options.rect)
+                editor.show()
+                return editor
+            elif node.type == float:
+                editor = QDoubleSpinBox(parent)
+                editor.setSuffix(node.unit or "")
+                editor.setRange(node.min or -sys.maxsize,
+                                node.max or sys.maxsize)
+                editor.setGeometry(options.rect)
+                editor.show()
+                return editor
+            else:
+                return super().createEditor(parent, options, index)
 
-    def setEditorData(self, widget, index):
+    def destroyEditor(self, editor, index):
+        self.update = True
+        super().destroyEditor(editor, index)
+
+    def setEditorData(self, editor, index):
         if self.update:
             self.update = False
-            return super().setEditorData(widget, index)
+            node = index.internalPointer()
+            if node.type in (int, float):
+                editor.setValue(node.value)
+            else:
+                return super().setEditorData(editor, index)
 
+    def setModelData(self, editor, model, index):
+        if isinstance(editor, (QSpinBox, QDoubleSpinBox)):
+            print(editor.value())
+            model.setData(index, editor.value())
+        else:
+            super().setModelData(editor, model, index)
 
 class JsonDataModel(QAbstractItemModel):
     def __init__(self, rootnode: JsonNode, parent=None):
@@ -73,44 +108,64 @@ class JsonDataModel(QAbstractItemModel):
         if not index.isValid():
             return
 
+        node = index.internalPointer()
+        column = self.columns[index.column()]
+
         if role in (Qt.DisplayRole, Qt.EditRole):
-            item = index.internalPointer()
-            column = self.columns[index.column()]
+
             if column.name == 'key':
-                return item.key
+                return node.key
             if column.name == 'name':
-                return item.name
+                return node.name
             elif column.name == 'value':
-                if isinstance(item, JsonItem):
-                    if item.value is None:
+                if isinstance(node, JsonItem):
+                    if node.value is None:
                         return "-"
                     else:
-                        return item.value_str() + ' ' + item.unit
+                        if node.type in (int, float):
+                            return node.value_str() + ' ' + node.unit
+
+        elif role == Qt.CheckStateRole:
+            if column.name == 'value':
+                if isinstance(node, JsonItem):
+                    if node.type == bool:
+                        return Qt.Checked if node.value else Qt.Unchecked
 
     def setData(self, index:QModelIndex, value, role=Qt.EditRole):
         if not index.isValid():
             return False
 
+        node = index.internalPointer()
+
         if role == Qt.EditRole:
-            node = index.internalPointer()
             if isinstance(node, JsonItem):
                 if node.type in (float, int, None):
-                    node.value = extract_number(value)
-                elif node.type == bool:
-                    node.value = (value.lower() == 'true')
+                    node.value = value
                 self.dataChanged.emit(index, index, [Qt.EditRole])
                 return True
+
+        elif role == Qt.CheckStateRole:
+            if isinstance(node, JsonItem):
+                if node.type == bool:
+                    node.value = value == Qt.Checked
+                    self.dataChanged.emit(index, index, [Qt.CheckStateRole])
+                    return True
         return False
 
     def flags(self, index: QModelIndex):
         flags = Qt.NoItemFlags | Qt.ItemIsDragEnabled | Qt.ItemIsSelectable
         if index.isValid():
             node = self.node_from_index(index)
+            column = self.columns[index.column()].name
+
             if node.latest:
                 flags |= Qt.ItemIsEnabled
             if isinstance(node, JsonItem):
-                if self.columns[index.column()].name == "value" and not node.readonly:
-                    flags |= Qt.ItemIsEditable
+                if column == 'value' and not node.readonly:
+                   if not node.type == bool:
+                        flags |= Qt.ItemIsEditable
+                   else:
+                        flags |= Qt.ItemIsUserCheckable
         return flags
 
     def mimeTypes(self):
