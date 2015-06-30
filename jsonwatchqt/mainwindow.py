@@ -8,10 +8,11 @@
 import datetime
 import logging
 import json
+import os
 
 import serial
 from PyQt5.QtWidgets import QAction, QDialog, QMainWindow, QMessageBox, \
-    QDockWidget, QLabel
+    QDockWidget, QLabel, QFileDialog
 from PyQt5.QtCore import QSettings, QCoreApplication, Qt, QThread, \
     pyqtSignal
 
@@ -112,11 +113,17 @@ class MainWindow(QMainWindow):
         self.quitAction = QAction(self.tr("Quit"), self)
         self.quitAction.setShortcut("Alt+F4")
         self.quitAction.triggered.connect(self.close)
+        # Save Config
+        self.savecfgAction = QAction(self.tr("Save"), self)
+        self.savecfgAction.setShortcut(Qt.Key_Save)
+        self.savecfgAction.triggered.connect(self.show_savecfg_dlg)
 
         # Menus
         self.fileMenu = self.menuBar().addMenu(self.tr("File"))
         self.fileMenu.addAction(self.connectAction)
         self.fileMenu.addAction(self.serialdlgAction)
+        self.fileMenu.addSeparator()
+        self.fileMenu.addAction(self.savecfgAction)
         self.fileMenu.addSeparator()
         self.fileMenu.addAction(self.quitAction)
 
@@ -162,7 +169,12 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.save_settings()
-        self.worker.quit()
+
+        try:
+            self.worker.quit()
+        except AttributeError:
+            pass
+
         try:
             self.serial.close()
         except (SerialException, AttributeError):
@@ -257,4 +269,19 @@ class MainWindow(QMainWindow):
         self.connectAction.setText(self.tr("Connect"))
         self.serialdlgAction.setEnabled(True)
         self.connectionstateLabel.setText(self.tr("Not connected"))
+
+    def show_savecfg_dlg(self):
+        filename, _ = QFileDialog.getSaveFileName(
+            self, self.tr("Save configuration file..."),
+            directory=os.path.expanduser("~"),
+            filter="Json file (*.json)"
+        )
+
+        if filename:
+            self.save_config(filename)
+
+    def save_config(self, filename):
+        config_string = self.rootnode.dump()
+        with open(filename, 'w') as f:
+            f.write(config_string)
 

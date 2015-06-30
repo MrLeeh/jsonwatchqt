@@ -3,14 +3,14 @@
 
 """
 
-from PyQt5.QtCore import QModelIndex, Qt, QAbstractItemModel, QMimeData, \
-    QByteArray, QDataStream, QIODevice
-from PyQt5.QtWidgets import QTreeView, QApplication, QItemDelegate, QSpinBox, \
-    QDoubleSpinBox, QCheckBox
 import sys
 import re
 
-import serial
+from PyQt5.QtCore import QModelIndex, Qt, QAbstractItemModel, QMimeData, \
+    QByteArray, QDataStream, QIODevice
+from PyQt5.QtWidgets import QTreeView, QItemDelegate, QSpinBox, \
+    QDoubleSpinBox
+
 from jsonwatch.abstractjsonitem import AbstractJsonItem
 from jsonwatch.jsonnode import JsonNode
 from jsonwatch.jsonitem import JsonItem
@@ -36,7 +36,7 @@ class MyItemDelegate(QItemDelegate):
         self.update = True
         node = index.internalPointer()
         if isinstance(node, JsonItem):
-            if node.type == int:
+            if node.type == 'int':
                 editor = QSpinBox(parent)
                 editor.setSuffix(node.unit or "")
                 editor.setRange(node.min or -sys.maxsize,
@@ -44,7 +44,7 @@ class MyItemDelegate(QItemDelegate):
                 editor.setGeometry(options.rect)
                 editor.show()
                 return editor
-            elif node.type == float:
+            elif node.type == 'float':
                 editor = QDoubleSpinBox(parent)
                 editor.setSuffix(node.unit or "")
                 editor.setRange(node.min or -sys.maxsize,
@@ -63,7 +63,7 @@ class MyItemDelegate(QItemDelegate):
         if self.update:
             self.update = False
             node = index.internalPointer()
-            if node.type in (int, float):
+            if node.type in ('int', 'float'):
                 editor.setValue(node.value)
             else:
                 return super().setEditorData(editor, index)
@@ -74,6 +74,7 @@ class MyItemDelegate(QItemDelegate):
             model.setData(index, editor.value())
         else:
             super().setModelData(editor, model, index)
+
 
 class JsonDataModel(QAbstractItemModel):
     def __init__(self, rootnode: JsonNode, parent=None):
@@ -122,13 +123,13 @@ class JsonDataModel(QAbstractItemModel):
                     if node.value is None:
                         return "-"
                     else:
-                        if node.type in (int, float):
+                        if node.type in ('int', 'float'):
                             return node.value_str() + ' ' + node.unit
 
         elif role == Qt.CheckStateRole:
             if column.name == 'value':
                 if isinstance(node, JsonItem):
-                    if node.type == bool:
+                    if node.type == 'bool':
                         return Qt.Checked if node.value else Qt.Unchecked
 
     def setData(self, index:QModelIndex, value, role=Qt.EditRole):
@@ -139,14 +140,14 @@ class JsonDataModel(QAbstractItemModel):
 
         if role == Qt.EditRole:
             if isinstance(node, JsonItem):
-                if node.type in (float, int, None):
+                if node.type in ('float', 'int', None):
                     node.value = value
                 self.dataChanged.emit(index, index, [Qt.EditRole])
                 return True
 
         elif role == Qt.CheckStateRole:
             if isinstance(node, JsonItem):
-                if node.type == bool:
+                if node.type == 'bool':
                     node.value = value == Qt.Checked
                     self.dataChanged.emit(index, index, [Qt.CheckStateRole])
                     return True
@@ -162,7 +163,7 @@ class JsonDataModel(QAbstractItemModel):
                 flags |= Qt.ItemIsEnabled
             if isinstance(node, JsonItem):
                 if column == 'value' and not node.readonly:
-                   if not node.type == bool:
+                   if not node.type == 'bool':
                         flags |= Qt.ItemIsEditable
                    else:
                         flags |= Qt.ItemIsUserCheckable
@@ -253,20 +254,3 @@ class ObjectExplorer(QTreeView):
 
     def refresh(self):
         self.model().refresh()
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    w = ObjectExplorer()
-    jsonstr = '''
-    {
-        "item2": 3,
-        "item1": 2,
-        "item3": {
-            "item1": 4,
-            "item2": 5
-        }
-    }'''
-    w.refresh(jsonstr)
-    w.show()
-    app.exec_()
