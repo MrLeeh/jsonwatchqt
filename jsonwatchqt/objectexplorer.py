@@ -9,11 +9,10 @@ import sys
 import re
 
 import serial
+from jsonwatch.abstractjsonitem import AbstractJsonItem
 from jsonwatch.jsonnode import JsonNode
 from jsonwatch.jsonitem import JsonItem
-
-
-utf8_to_bytearray = lambda x: bytearray(x, 'utf-8')
+from pyqtconfig.qt import pyqtSignal
 
 
 def extract_number(s: str):
@@ -42,10 +41,9 @@ class MyItemDelegate(QItemDelegate):
 
 
 class JsonDataModel(QAbstractItemModel):
-    def __init__(self, rootnode: JsonNode, ser: serial.Serial, parent=None):
+    def __init__(self, rootnode: JsonNode, parent=None):
         super().__init__(parent)
         self.root = rootnode
-        self.serial = ser
         self.root.child_added_callback = self.insert_row
         self.columns = [
             Column('key'),
@@ -96,12 +94,12 @@ class JsonDataModel(QAbstractItemModel):
         if role == Qt.EditRole:
             node = index.internalPointer()
             if isinstance(node, JsonItem):
-                if self.serial.isOpen():
+                if node.type in (float, int, None):
                     node.value = extract_number(value)
-                    s = '{"%s": %i}\n' % (node.key, node._raw_value)
-                    print(s.strip())
-                    self.serial.write(utf8_to_bytearray(s))
-                    return True
+                elif node.type == bool:
+                    node.value = (value.lower() == 'true')
+                self.dataChanged.emit(index, index, [Qt.EditRole])
+                return True
         return False
 
     def flags(self, index: QModelIndex):
@@ -123,7 +121,7 @@ class JsonDataModel(QAbstractItemModel):
         data = QByteArray()
         stream = QDataStream(data, QIODevice.WriteOnly)
 
-        path = lambda x: x.path
+        path = lambda x: '/'.join(x.path)
         node = lambda x: self.node_from_index(x)
         for path in set(path(node(index)) for index
                         in indexes if index.isValid()):
@@ -181,14 +179,22 @@ class JsonDataModel(QAbstractItemModel):
 
 
 class ObjectExplorer(QTreeView):
-    def __init__(self, rootnode: JsonNode, ser: serial.Serial, parent=None):
+    nodevalue_changed = pyqtSignal(AbstractJsonItem)
+
+    def __init__(self, rootnode: JsonNode, parent=None):
         super().__init__(parent)
-        self.setModel(JsonDataModel(rootnode, ser))
+        self.setModel(JsonDataModel(rootnode))
+        self.model().dataChanged.connect(self.data_changed)
         self.setItemDelegate(MyItemDelegate())
         self.setDragDropMode(QTreeView.DragDrop)
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(True)
+
+    def data_changed(self, topleft, bottomright, roles):
+        node = topleft.internalPointer()
+        if node is not None and isinstance(node, JsonItem):
+            self.nodevalue_changed.emit(node)
 
     def refresh(self):
         self.model().refresh()

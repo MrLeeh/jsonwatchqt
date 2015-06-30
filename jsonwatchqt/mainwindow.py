@@ -16,6 +16,7 @@ from PyQt5.QtCore import QSettings, QCoreApplication, Qt, QThread, \
     pyqtSignal
 
 from serial.serialutil import SerialException
+from jsonwatch.jsonitem import JsonItem
 
 from jsonwatch.jsonnode import JsonNode
 from jsonwatchqt.logger import LoggingWidget
@@ -28,6 +29,7 @@ from jsonwatchqt.serialdialog import SerialDialog
 
 
 logger = logging.getLogger("jsonwatchqt.mainwindow")
+utf8_to_bytearray = lambda x: bytearray(x, 'utf-8')
 
 
 class SerialWorker(QThread):
@@ -67,7 +69,8 @@ class MainWindow(QMainWindow):
         # Controller Settings
         self.settingsDialog = None
         # object explorer
-        self.objectexplorer = ObjectExplorer(self.rootnode, self.serial, self)
+        self.objectexplorer = ObjectExplorer(self.rootnode, self)
+        self.objectexplorer.nodevalue_changed.connect(self.send_serialdata)
         self.objectexplorerDockWidget = QDockWidget(
             self.tr("object explorer"), self
         )
@@ -159,6 +162,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.save_settings()
+        self.worker.quit()
         try:
             self.serial.close()
         except (SerialException, AttributeError):
@@ -176,12 +180,19 @@ class MainWindow(QMainWindow):
         self.serial.write(bytearray(jsonstring, 'utf-8'))
 
     def receive_serialdata(self, data):
-        self.loggingWidget.log(data)
-        self.rootnode.values_from_json(data)
+        self.loggingWidget.log_input(data)
+        self.rootnode.from_json(data)
 
         # refresh widgets
         self.objectexplorer.refresh()
         self.plot.refresh(datetime.datetime.now())
+
+    def send_serialdata(self, node):
+        if isinstance(node, JsonItem):
+            if self.serial.isOpen():
+                s = node.to_json()
+                self.serial.write(utf8_to_bytearray(s + '\n'))
+                self.loggingWidget.log_output(s.strip())
 
     def show_serialdlg(self):
         settings = QSettings()

@@ -91,7 +91,7 @@ class CtrlSettingsWidget(QDialog):
         node = JsonNode('root')
         node.add_child(JsonItem('send_settings', 1))
         try:
-            self.serial.write(bytearray(node.values_to_json(), 'utf-8'))
+            self.serial.write(bytearray(node.to_json(), 'utf-8'))
         except AttributeError as e:
             critical(self.parent(), self.tr("Serial Port is not open."))
 
@@ -101,7 +101,7 @@ class CtrlSettingsWidget(QDialog):
     def send_settings(self, *argv):
         self.mapper.map_to_node()
         try:
-            self.serial.write(bytearray(self.rootnode.values_to_json(), 'utf-8'))
+            self.serial.write(bytearray(self.rootnode.to_json(), 'utf-8'))
         except (AttributeError, SerialException) as e:
             critical(self.parent(), self.tr("Serial Port is not open."))
 

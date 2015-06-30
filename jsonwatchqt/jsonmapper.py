@@ -40,4 +40,4 @@ class JsonMapper:
                 jsonvalue = JsonItem(item.key)
                 self.node.add_child(jsonvalue)
             jsonvalue.value = fget()
-        print(self.node.values_to_json())
+        print(self.node.to_json())
