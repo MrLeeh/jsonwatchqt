@@ -1,5 +1,5 @@
 """
-    Copyright © 2015 by Stefan Lehmann
+    Copyright (c) 2015 by Stefan Lehmann
 
 """
 
@@ -121,7 +121,8 @@ class JsonDataModel(QAbstractItemModel):
             elif column.name == 'value':
                 if isinstance(node, JsonItem):
                     if node.value is None:
-                        return "-"
+                        if node.type != 'bool':
+                            return "-"
                     else:
                         if node.type in ('int', 'float'):
                             return node.value_str() + ' ' + node.unit

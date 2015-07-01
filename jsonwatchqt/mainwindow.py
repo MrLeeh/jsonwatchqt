@@ -2,9 +2,10 @@
 
 """
     GUI for Ultrasonic Temperature Controller
-    Copyright © 2015 by Stefan Lehmann
+    Copyright (c) 2015 by Stefan Lehmann
 
 """
+
 import datetime
 import logging
 import json
@@ -21,6 +22,7 @@ from jsonwatch.jsonitem import JsonItem
 
 from jsonwatch.jsonnode import JsonNode
 from jsonwatchqt.logger import LoggingWidget
+from jsonwatchqt.utilities import critical
 from pyqtconfig.config import QSettingsManager
 from jsonwatchqt.plotsettings import PlotSettingsWidget
 from jsonwatchqt.settingswidget import CtrlSettingsWidget
@@ -115,14 +117,19 @@ class MainWindow(QMainWindow):
         self.quitAction.triggered.connect(self.close)
         # Save Config
         self.savecfgAction = QAction(self.tr("Save"), self)
-        self.savecfgAction.setShortcut(Qt.Key_Save)
+        self.savecfgAction.setShortcut("Ctrl+S")
         self.savecfgAction.triggered.connect(self.show_savecfg_dlg)
+        # Load Config
+        self.loadcfgAction = QAction(self.tr("Open..."), self)
+        self.loadcfgAction.setShortcut("Ctrl+O")
+        self.loadcfgAction.triggered.connect(self.show_opencfg_dlg)
 
         # Menus
         self.fileMenu = self.menuBar().addMenu(self.tr("File"))
         self.fileMenu.addAction(self.connectAction)
         self.fileMenu.addAction(self.serialdlgAction)
         self.fileMenu.addSeparator()
+        self.fileMenu.addAction(self.loadcfgAction)
         self.fileMenu.addAction(self.savecfgAction)
         self.fileMenu.addSeparator()
         self.fileMenu.addAction(self.quitAction)
@@ -134,7 +141,6 @@ class MainWindow(QMainWindow):
 
         self.extrasMenu = self.menuBar().addMenu(self.tr("Extras"))
         self.extrasMenu.addAction(self.settingsdlgAction)
-
 
         # StatusBar
         statusbar = self.statusBar()
@@ -193,7 +199,10 @@ class MainWindow(QMainWindow):
 
     def receive_serialdata(self, data):
         self.loggingWidget.log_input(data)
-        self.rootnode.from_json(data)
+        try:
+            self.rootnode.from_json(data)
+        except ValueError as e:
+            logger.error(str(e))
 
         # refresh widgets
         self.objectexplorer.refresh()
@@ -289,3 +298,22 @@ class MainWindow(QMainWindow):
         with open(filename, 'w') as f:
             f.write(config_string)
 
+    def show_opencfg_dlg(self):
+        decode = lambda x: x.decode('utf-8')
+
+        filename, _ = QFileDialog.getOpenFileName(
+            self, self.tr("Open configuration file..."),
+            directory=os.path.expanduser("~"),
+            filter=self.tr("Json file (*.json);;All files (*.*)")
+        )
+        if filename:
+            with open(filename, 'rb') as f:
+                try:
+                    self.objectexplorer.model().beginResetModel()
+                    self.rootnode.load(decode(f.read()))
+                    self.objectexplorer.model().endResetModel()
+                except ValueError as e:
+                    critical(self, "File '%s' is not a valid config file."
+                             % filename)
+                    logger.error(str(e))
+                self.objectexplorer.refresh()
