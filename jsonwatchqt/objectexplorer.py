@@ -7,13 +7,14 @@ import sys
 import re
 
 from PyQt5.QtCore import QModelIndex, Qt, QAbstractItemModel, QMimeData, \
-    QByteArray, QDataStream, QIODevice
+    QByteArray, QDataStream, QIODevice, QPoint
 from PyQt5.QtWidgets import QTreeView, QItemDelegate, QSpinBox, \
-    QDoubleSpinBox
+    QDoubleSpinBox, QMenu, QAction
 
 from jsonwatch.abstractjsonitem import AbstractJsonItem
 from jsonwatch.jsonnode import JsonNode
 from jsonwatch.jsonitem import JsonItem
+from jsonwatchqt.itemproperties import ItemPropertyDialog
 from pyqtconfig.qt import pyqtSignal
 
 
@@ -36,20 +37,13 @@ class MyItemDelegate(QItemDelegate):
         self.update = True
         node = index.internalPointer()
         if isinstance(node, JsonItem):
-            if node.type == 'int':
-                editor = QSpinBox(parent)
-                editor.setSuffix(node.unit or "")
-                editor.setRange(node.min or -sys.maxsize,
-                                node.max or sys.maxsize)
-                editor.setGeometry(options.rect)
-                editor.show()
-                return editor
-            elif node.type == 'float':
+            if node.type in ('float', 'int'):
                 editor = QDoubleSpinBox(parent)
                 editor.setSuffix(node.unit or "")
                 editor.setRange(node.min or -sys.maxsize,
                                 node.max or sys.maxsize)
                 editor.setGeometry(options.rect)
+                editor.setDecimals(node.decimals or 0)
                 editor.show()
                 return editor
             else:
@@ -247,11 +241,56 @@ class ObjectExplorer(QTreeView):
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(True)
+        self.doubleClicked.connect(self.double_clicked)
+
+        # context menu
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_contextmenu)
+
+        # actions
+        self.propertiesAction = QAction(self.tr("Properties..."), self)
+        self.propertiesAction.triggered.connect(self.show_properties)
+
+        self.editAction = QAction(self.tr("Edit value..."), self)
+        self.editAction.setShortcut("F2")
+        self.editAction.triggered.connect(self.edit_value)
 
     def data_changed(self, topleft, bottomright, roles):
         node = topleft.internalPointer()
         if node is not None and isinstance(node, JsonItem):
             self.nodevalue_changed.emit(node)
 
+    def double_clicked(self, *args, **kwargs):
+        pass
+
+    def edit_value(self):
+        index = self.currentIndex()
+        if not index.isValid(): return
+
+        i = self.model().index(index.row(), 2, index.parent())
+        self.edit(i)
+
     def refresh(self):
         self.model().refresh()
+
+    def show_contextmenu(self, pos: QPoint):
+        if self.currentIndex().isValid():
+            node = self.currentIndex().internalPointer()
+            menu = QMenu(self)
+            if isinstance(node, JsonItem):
+                menu.addAction(self.editAction)
+                self.editAction.setEnabled(not node.readonly)
+                menu.addAction(self.propertiesAction)
+                menu.setDefaultAction(self.editAction
+                                      if not node.readonly
+                                      else self.propertiesAction)
+
+                menu.popup(self.viewport().mapToGlobal(pos), self.editAction)
+
+    def show_properties(self):
+        index = self.currentIndex()
+        node = index.internalPointer()
+        if not (index.isValid() and isinstance(node, JsonItem)): return
+
+        dlg = ItemPropertyDialog(node, self.parent())
+        dlg.exec_()

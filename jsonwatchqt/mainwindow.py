@@ -68,6 +68,7 @@ class MainWindow(QMainWindow):
         self.serial = serial.Serial()
         self.rootnode = JsonNode('root')
         self.settings = QSettingsManager()
+        self.filename = None
 
         # Controller Settings
         self.settingsDialog = None
@@ -115,10 +116,15 @@ class MainWindow(QMainWindow):
         self.quitAction = QAction(self.tr("Quit"), self)
         self.quitAction.setShortcut("Alt+F4")
         self.quitAction.triggered.connect(self.close)
+        # Save Config as
+        self.savecfgasAction = QAction(self.tr("Save as..."), self)
+        self.savecfgasAction.setShortcut("Ctrl+Shift+S")
+        self.savecfgasAction.triggered.connect(self.show_savecfg_dlg)
         # Save Config
         self.savecfgAction = QAction(self.tr("Save"), self)
         self.savecfgAction.setShortcut("Ctrl+S")
-        self.savecfgAction.triggered.connect(self.show_savecfg_dlg)
+        self.savecfgAction.triggered.connect(self.save_config)
+
         # Load Config
         self.loadcfgAction = QAction(self.tr("Open..."), self)
         self.loadcfgAction.setShortcut("Ctrl+O")
@@ -130,6 +136,7 @@ class MainWindow(QMainWindow):
         self.fileMenu.addAction(self.serialdlgAction)
         self.fileMenu.addSeparator()
         self.fileMenu.addAction(self.loadcfgAction)
+        self.fileMenu.addAction(self.savecfgasAction)
         self.fileMenu.addAction(self.savecfgAction)
         self.fileMenu.addSeparator()
         self.fileMenu.addAction(self.quitAction)
@@ -291,12 +298,16 @@ class MainWindow(QMainWindow):
         )
 
         if filename:
-            self.save_config(filename)
+            self.filename = filename
+            self.save_config()
 
-    def save_config(self, filename):
-        config_string = self.rootnode.dump()
-        with open(filename, 'w') as f:
-            f.write(config_string)
+    def save_config(self):
+        if self.filename is not None:
+            config_string = self.rootnode.dump()
+            with open(self.filename, 'w') as f:
+                f.write(config_string)
+        else:
+            self.show_savecfg_dlg()
 
     def show_opencfg_dlg(self):
         decode = lambda x: x.decode('utf-8')
@@ -312,6 +323,7 @@ class MainWindow(QMainWindow):
                     self.objectexplorer.model().beginResetModel()
                     self.rootnode.load(decode(f.read()))
                     self.objectexplorer.model().endResetModel()
+                    self.filename = filename
                 except ValueError as e:
                     critical(self, "File '%s' is not a valid config file."
                              % filename)
