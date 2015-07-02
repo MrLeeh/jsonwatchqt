@@ -68,7 +68,7 @@ class MainWindow(QMainWindow):
         self.serial = serial.Serial()
         self.rootnode = JsonNode('root')
         self.settings = QSettingsManager()
-        self.filename = None
+        self._filename = None
 
         # Controller Settings
         self.settingsDialog = None
@@ -124,7 +124,6 @@ class MainWindow(QMainWindow):
         self.savecfgAction = QAction(self.tr("Save"), self)
         self.savecfgAction.setShortcut("Ctrl+S")
         self.savecfgAction.triggered.connect(self.save_config)
-
         # Load Config
         self.loadcfgAction = QAction(self.tr("Open..."), self)
         self.loadcfgAction.setShortcut("Ctrl+O")
@@ -161,9 +160,40 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.objectexplorerDockWidget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.plotsettingsDockWidget)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.loggingDockWidget)
-        self.init_jsonobjects()
 
         self.load_settings()
+
+    @property
+    def filename(self):
+        return self._filename
+
+    @filename.setter
+    def filename(self, value=""):
+        self._filename = value
+        s = "%s %s" % (QCoreApplication.applicationName(),
+                       QCoreApplication.applicationVersion())
+        if value is not None:
+            s += " - " + value
+        self.setWindowTitle(s)
+
+    def load_config(self, filename):
+        decode = lambda x: x.decode('utf-8')
+        self.filename = filename
+        try:
+            with open(filename, 'rb') as f:
+                try:
+                    self.objectexplorer.model().beginResetModel()
+                    self.rootnode.load(decode(f.read()))
+                    self.objectexplorer.model().endResetModel()
+                except ValueError as e:
+                    critical(self, "File '%s' is not a valid config file."
+                             % filename)
+                    logger.error(str(e))
+                    self.filename = None
+        except FileNotFoundError as e:
+            logger.error(str(e))
+            self.filename = None
+        self.objectexplorer.refresh()
 
     def load_settings(self):
         try:
@@ -176,9 +206,14 @@ class MainWindow(QMainWindow):
         except TypeError:
             logger.debug("error restoring window geometry")
 
+        self.filename = self.settings.get("filename")
+        if self.filename is not None:
+            self.load_config(self.filename)
+
     def save_settings(self):
         self.settings.set("windowState", self.saveState())
         self.settings.set("windowGeometry", self.saveGeometry())
+        self.settings.set("filename", self.filename)
 
     def closeEvent(self, event):
         self.save_settings()
@@ -310,22 +345,9 @@ class MainWindow(QMainWindow):
             self.show_savecfg_dlg()
 
     def show_opencfg_dlg(self):
-        decode = lambda x: x.decode('utf-8')
-
         filename, _ = QFileDialog.getOpenFileName(
             self, self.tr("Open configuration file..."),
             directory=os.path.expanduser("~"),
             filter=self.tr("Json file (*.json);;All files (*.*)")
         )
-        if filename:
-            with open(filename, 'rb') as f:
-                try:
-                    self.objectexplorer.model().beginResetModel()
-                    self.rootnode.load(decode(f.read()))
-                    self.objectexplorer.model().endResetModel()
-                    self.filename = filename
-                except ValueError as e:
-                    critical(self, "File '%s' is not a valid config file."
-                             % filename)
-                    logger.error(str(e))
-                self.objectexplorer.refresh()
+        if filename: self.load_config(filename)

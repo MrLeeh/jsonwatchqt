@@ -24,7 +24,7 @@ logging.basicConfig(
 app = QApplication(sys.argv)
 QCoreApplication.setOrganizationName("Stefan Lehmann")
 QCoreApplication.setApplicationName("JsonWatchQt")
-
+QCoreApplication.setApplicationVersion("0.0.1")
 if args.clear: QSettings().clear()
 
 # Open Mainwindow
