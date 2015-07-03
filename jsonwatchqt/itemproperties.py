@@ -46,7 +46,7 @@ class ItemPropertyDialog(QDialog):
         self.decimalsLabel = QLabel(self.tr("decimals:"))
         self.decimalsSpinBox = QSpinBox()
         self.decimalsSpinBox.setRange(0, 10)
-        self.decimalsSpinBox.setValue(self.item.decimals or 2)
+        self.decimalsSpinBox.setValue(self.item.decimals or 0)
         self.decimalsLabel.setBuddy(self.decimalsSpinBox)
         self.decimalsSpinBox.valueChanged.connect(self.data_changed)
         self.last_decimals = self.decimalsSpinBox.value()
@@ -56,13 +56,13 @@ class ItemPropertyDialog(QDialog):
         self.minSpinBox =QDoubleSpinBox()
         self.minSpinBox.setRange(-sys.maxsize, sys.maxsize)
         self.minLabel.setBuddy(self.minSpinBox)
-        self.minSpinBox.setValue(self.item.min or -1000.0)
+        self.minSpinBox.setValue(self.item.min or 0.0)
 
         # max
         self.maxLabel = QLabel(self.tr("maximum:"))
         self.maxSpinBox = QDoubleSpinBox()
         self.maxSpinBox.setRange(-sys.maxsize, sys.maxsize)
-        self.maxSpinBox.setValue(self.item.max or 1000.0)
+        self.maxSpinBox.setValue(self.item.max or 100.0)
 
         # numerator
         self.scalefactorLabel = QLabel(self.tr("scalefactor:"))
@@ -120,7 +120,7 @@ class ItemPropertyDialog(QDialog):
         self.item.scalefactor = self.scalefactorSpinBox.value()
         self.item.readonly = self.readonlyCheckBox.checkState() == Qt.Checked
         self.item.type = self.typeComboBox.currentText()
-        super().accept()
+        return super().accept()
 
     def data_changed(self):
         type_numeric = self.typeComboBox.currentText() not in ('bool', 'str')

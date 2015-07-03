@@ -66,8 +66,9 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.counter = 0
         self.serial = serial.Serial()
-        self.rootnode = JsonNode('root')
+        self.rootnode = JsonNode('')
         self.settings = QSettingsManager()
+        self._dirty = False
         self._filename = None
 
         # Controller Settings
@@ -75,6 +76,7 @@ class MainWindow(QMainWindow):
         # object explorer
         self.objectexplorer = ObjectExplorer(self.rootnode, self)
         self.objectexplorer.nodevalue_changed.connect(self.send_serialdata)
+        self.objectexplorer.nodeproperty_changed.connect(self.set_dirty)
         self.objectexplorerDockWidget = QDockWidget(
             self.tr("object explorer"), self
         )
@@ -100,7 +102,26 @@ class MainWindow(QMainWindow):
         # Plot Widget
         self.plot = PlotWidget(self.rootnode, self.settings, self)
 
-        # Actions
+        # actions and menus
+        self._init_actions()
+        self._init_menus()
+
+        # StatusBar
+        statusbar = self.statusBar()
+        statusbar.setVisible(True)
+        self.connectionstateLabel = QLabel(self.tr("Not connected"))
+        statusbar.addPermanentWidget(self.connectionstateLabel)
+        statusbar.showMessage(self.tr("Ready"))
+
+        # Layout
+        self.setCentralWidget(self.plot)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.objectexplorerDockWidget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.plotsettingsDockWidget)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.loggingDockWidget)
+
+        self.load_settings()
+
+    def _init_actions(self):
         # Serial Dialog
         self.serialdlgAction = QAction(self.tr("Serial Settings..."), self)
         self.serialdlgAction.setShortcut("F6")
@@ -128,40 +149,34 @@ class MainWindow(QMainWindow):
         self.loadcfgAction = QAction(self.tr("Open..."), self)
         self.loadcfgAction.setShortcut("Ctrl+O")
         self.loadcfgAction.triggered.connect(self.show_opencfg_dlg)
+        # New
+        self.newAction = QAction(self.tr("New"), self)
+        self.newAction.setShortcut("Ctrl+N")
+        self.newAction.triggered.connect(self.new)
 
-        # Menus
+    def _init_menus(self):
+        # file menu
         self.fileMenu = self.menuBar().addMenu(self.tr("File"))
+        self.fileMenu.addAction(self.newAction)
+        self.fileMenu.addAction(self.loadcfgAction)
+        self.fileMenu.addAction(self.savecfgAction)
+        self.fileMenu.addAction(self.savecfgasAction)
+        self.fileMenu.addSeparator()
         self.fileMenu.addAction(self.connectAction)
         self.fileMenu.addAction(self.serialdlgAction)
         self.fileMenu.addSeparator()
-        self.fileMenu.addAction(self.loadcfgAction)
-        self.fileMenu.addAction(self.savecfgasAction)
-        self.fileMenu.addAction(self.savecfgAction)
-        self.fileMenu.addSeparator()
         self.fileMenu.addAction(self.quitAction)
 
+        # view menu
         self.viewMenu = self.menuBar().addMenu(self.tr("View"))
         self.viewMenu.addAction(self.objectexplorerDockWidget.toggleViewAction())
         self.viewMenu.addAction(self.plotsettingsDockWidget.toggleViewAction())
         self.viewMenu.addAction(self.loggingDockWidget.toggleViewAction())
 
+        # extras menu
         self.extrasMenu = self.menuBar().addMenu(self.tr("Extras"))
         self.extrasMenu.addAction(self.settingsdlgAction)
 
-        # StatusBar
-        statusbar = self.statusBar()
-        statusbar.setVisible(True)
-        self.connectionstateLabel = QLabel(self.tr("Not connected"))
-        statusbar.addPermanentWidget(self.connectionstateLabel)
-        statusbar.showMessage(self.tr("Ready"))
-
-        # Layout
-        self.setCentralWidget(self.plot)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.objectexplorerDockWidget)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.plotsettingsDockWidget)
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.loggingDockWidget)
-
-        self.load_settings()
 
     @property
     def filename(self):
@@ -170,11 +185,19 @@ class MainWindow(QMainWindow):
     @filename.setter
     def filename(self, value=""):
         self._filename = value
-        s = "%s %s" % (QCoreApplication.applicationName(),
-                       QCoreApplication.applicationVersion())
-        if value is not None:
-            s += " - " + value
-        self.setWindowTitle(s)
+        self.refresh_windowTitle()
+
+    @property
+    def dirty(self):
+        return self._dirty
+
+    @dirty.setter
+    def dirty(self, value):
+        self._dirty = value
+        self.refresh_windowTitle()
+
+    def set_dirty(self):
+        self.dirty = True
 
     def load_config(self, filename):
         decode = lambda x: x.decode('utf-8')
@@ -216,6 +239,20 @@ class MainWindow(QMainWindow):
         self.settings.set("filename", self.filename)
 
     def closeEvent(self, event):
+        if self.dirty:
+            res = QMessageBox.question(
+                self,
+                QCoreApplication.applicationName(),
+                self.tr("Save changes to file '%s'?" %
+                        self.filename
+                        if self.filename is not None else "unknown"),
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
+            )
+            if res == QMessageBox.Cancel:
+                event.ignore()
+                return
+            elif res == QMessageBox.Yes: self.save_config()
+
         self.save_settings()
 
         try:
@@ -234,6 +271,11 @@ class MainWindow(QMainWindow):
 
         # with open("c:/Users/Lehmann/data/python34/jsonwatch/tests/mycfg.json", 'rb') as f:
         #     self.rootnode.load(decode(read(f)))
+
+    def new(self):
+        self.objectexplorer.model().beginResetModel()
+        self.rootnode.clear()
+        self.objectexplorer.model().endResetModel()
 
     def send_reset(self):
         jsonstring = json.dumps({"resetpid": 1})
@@ -341,6 +383,7 @@ class MainWindow(QMainWindow):
             config_string = self.rootnode.dump()
             with open(self.filename, 'w') as f:
                 f.write(config_string)
+            self.dirty = False
         else:
             self.show_savecfg_dlg()
 
@@ -351,3 +394,12 @@ class MainWindow(QMainWindow):
             filter=self.tr("Json file (*.json);;All files (*.*)")
         )
         if filename: self.load_config(filename)
+
+    def refresh_windowTitle(self):
+        s = "%s %s" % (QCoreApplication.applicationName(),
+                       QCoreApplication.applicationVersion())
+        if self.filename is not None:
+            s += " - " + self.filename
+        if self.dirty:
+            s += "*"
+        self.setWindowTitle(s)

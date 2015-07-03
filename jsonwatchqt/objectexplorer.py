@@ -5,17 +5,21 @@
 
 import sys
 import re
+import logging
 
 from PyQt5.QtCore import QModelIndex, Qt, QAbstractItemModel, QMimeData, \
     QByteArray, QDataStream, QIODevice, QPoint
 from PyQt5.QtWidgets import QTreeView, QItemDelegate, QSpinBox, \
-    QDoubleSpinBox, QMenu, QAction
+    QDoubleSpinBox, QMenu, QAction, QInputDialog, QDialog
 
 from jsonwatch.abstractjsonitem import AbstractJsonItem
 from jsonwatch.jsonnode import JsonNode
 from jsonwatch.jsonitem import JsonItem
 from jsonwatchqt.itemproperties import ItemPropertyDialog
 from pyqtconfig.qt import pyqtSignal
+
+
+logger = logging.getLogger("jsonwatchqt.objectexplorer")
 
 
 def extract_number(s: str):
@@ -58,7 +62,10 @@ class MyItemDelegate(QItemDelegate):
             self.update = False
             node = index.internalPointer()
             if node.type in ('int', 'float'):
-                editor.setValue(node.value)
+                try:
+                    editor.setValue(node.value)
+                except TypeError as e:
+                    pass
             else:
                 return super().setEditorData(editor, index)
 
@@ -231,6 +238,7 @@ class JsonDataModel(QAbstractItemModel):
 
 class ObjectExplorer(QTreeView):
     nodevalue_changed = pyqtSignal(AbstractJsonItem)
+    nodeproperty_changed = pyqtSignal(AbstractJsonItem)
 
     def __init__(self, rootnode: JsonNode, parent=None):
         super().__init__(parent)
@@ -248,12 +256,22 @@ class ObjectExplorer(QTreeView):
         self.customContextMenuRequested.connect(self.show_contextmenu)
 
         # actions
-        self.propertiesAction = QAction(self.tr("Properties..."), self)
+        # propertiesAction
+        self.propertiesAction = QAction(self.tr("Properties"), self)
         self.propertiesAction.triggered.connect(self.show_properties)
-
-        self.editAction = QAction(self.tr("Edit value..."), self)
+        # editAction
+        self.editAction = QAction(self.tr("Edit value"), self)
         self.editAction.setShortcut("F2")
         self.editAction.triggered.connect(self.edit_value)
+        # Edit key
+        self.editkeyAction = QAction(self.tr("Edit key"), self)
+        self.editkeyAction.triggered.connect(self.edit_key)
+        # insertitemAction
+        self.insertitemAction = QAction(self.tr("Insert item"), self)
+        self.insertitemAction.triggered.connect(self.new_item)
+        # Remove item
+        self.removeitemAction = QAction(self.tr("Remove item"), self)
+        self.removeitemAction.triggered.connect(self.remove_item)
 
     def data_changed(self, topleft, bottomright, roles):
         node = topleft.internalPointer()
@@ -261,7 +279,25 @@ class ObjectExplorer(QTreeView):
             self.nodevalue_changed.emit(node)
 
     def double_clicked(self, *args, **kwargs):
-        pass
+        index = self.currentIndex()
+        if not index.isValid(): return
+        column = self.model().columns[index.column()]
+        if column.name == "value":
+            self.edit_value()
+        else:
+            self.show_properties()
+
+    def edit_key(self):
+        index = self.currentIndex()
+        if index.isValid():
+            node = index.internalPointer()
+            key, b = QInputDialog.getText(
+                self, "Edit Json item", "Insert new key for item:",
+                text=node.key
+            )
+            if not b: return
+            node.key = key
+            self.model().dataChanged.emit(index, index, [Qt.DisplayRole])
 
     def edit_value(self):
         index = self.currentIndex()
@@ -270,22 +306,50 @@ class ObjectExplorer(QTreeView):
         i = self.model().index(index.row(), 2, index.parent())
         self.edit(i)
 
+    def new_item(self):
+        index = self.currentIndex()
+        if index.isValid():
+            node = index.internalPointer()
+            key, b = QInputDialog.getText(self, "New Json item",
+                                       "Insert key for new item:")
+            if not b: return
+
+            item = JsonItem(key)
+            node.add(item)
+            row = node.index(item)
+            self.model().beginInsertRows(index, row, row)
+            self.model().endInsertRows()
+
     def refresh(self):
         self.model().refresh()
 
+    def remove_item(self):
+        index = self.currentIndex()
+        if index.isValid():
+            node = index.internalPointer()
+            if node.parent is not None:
+                node.parent.remove(node.key)
+
     def show_contextmenu(self, pos: QPoint):
+        menu = QMenu(self)
         if self.currentIndex().isValid():
             node = self.currentIndex().internalPointer()
-            menu = QMenu(self)
+            if isinstance(node, JsonNode):
+                menu.addAction(self.insertitemAction)
+            menu.addAction(self.editkeyAction)
             if isinstance(node, JsonItem):
+                # edit
                 menu.addAction(self.editAction)
                 self.editAction.setEnabled(not node.readonly)
+                # properties
                 menu.addAction(self.propertiesAction)
                 menu.setDefaultAction(self.editAction
                                       if not node.readonly
                                       else self.propertiesAction)
+            menu.addAction(self.removeitemAction)
 
-                menu.popup(self.viewport().mapToGlobal(pos), self.editAction)
+
+        menu.popup(self.viewport().mapToGlobal(pos), self.editAction)
 
     def show_properties(self):
         index = self.currentIndex()
@@ -293,4 +357,5 @@ class ObjectExplorer(QTreeView):
         if not (index.isValid() and isinstance(node, JsonItem)): return
 
         dlg = ItemPropertyDialog(node, self.parent())
-        dlg.exec_()
+        if dlg.exec_() == QDialog.Accepted:
+            self.nodeproperty_changed.emit(node)
