@@ -2,8 +2,8 @@
     Copyright (c) 2015 by Stefan Lehmann
 
 """
-from PyQt5.QtCore import QSignalMapper, Qt
-from PyQt5.QtWidgets import QDialog, QLabel, QLineEdit, QGridLayout, QComboBox, \
+from qtpy.QtCore import QSignalMapper, Qt
+from qtpy.QtWidgets import QDialog, QLabel, QLineEdit, QGridLayout, QComboBox, \
     QSpinBox, QDoubleSpinBox, QDialogButtonBox, QApplication, QCheckBox
 import sys
 from jsonwatch.abstractjsonitem import VALUETYPES
@@ -38,8 +38,9 @@ class ItemPropertyDialog(QDialog):
         self.typeLabel = QLabel(self.tr("type:"))
         self.typeComboBox = QComboBox()
         self.typeComboBox.addItems([k for k, t in VALUETYPES])
-        self.typeComboBox.setCurrentText(self.item.type or "")
-        self.typeComboBox.currentTextChanged.connect(self.data_changed)
+        self.typeComboBox.setCurrentIndex(
+            self.typeComboBox.findText(self.item.type))
+        self.typeComboBox.currentIndexChanged.connect(self.data_changed)
         self.typeLabel.setBuddy(self.typeComboBox)
 
         # decimals

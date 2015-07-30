@@ -13,7 +13,9 @@ setup(
     install_requires=[
         'pyqtconfig>=0.8.6',
         'jsonwatch>=0.0.1',
-        'pandas'
+        'pandas',
+        'matplotlib',
+        'pyserial'
     ],
     platforms='any',
     scripts=['run_jsonwatchqt.pyw']

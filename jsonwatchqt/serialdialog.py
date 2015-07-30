@@ -6,8 +6,8 @@
 import sys
 import glob
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QComboBox, \
+from qtpy.QtCore import Qt
+from qtpy.QtWidgets import QApplication, QDialog, QLabel, QComboBox, \
     QGridLayout, QDialogButtonBox
 import serial.tools.list_ports
 import serial

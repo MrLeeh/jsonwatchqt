@@ -12,10 +12,10 @@ import json
 import os
 
 import serial
-from PyQt5.QtWidgets import QAction, QDialog, QMainWindow, QMessageBox, \
+from qtpy.QtWidgets import QAction, QDialog, QMainWindow, QMessageBox, \
     QDockWidget, QLabel, QFileDialog
-from PyQt5.QtCore import QSettings, QCoreApplication, Qt, QThread, \
-    pyqtSignal
+from qtpy.QtCore import QSettings, QCoreApplication, Qt, QThread, \
+    Signal
 
 from serial.serialutil import SerialException
 from jsonwatch.jsonitem import JsonItem
@@ -36,7 +36,7 @@ utf8_to_bytearray = lambda x: bytearray(x, 'utf-8')
 
 
 class SerialWorker(QThread):
-    data_received = pyqtSignal(str)
+    data_received = Signal(str)
 
     def __init__(self, ser: serial.Serial, parent=None):
         super().__init__(parent)
@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.counter = 0
         self.serial = serial.Serial()
-        self.rootnode = JsonNode('')
+        self.rootnode = JsonNode('root')
         self.settings = QSettingsManager()
         self._dirty = False
         self._filename = None

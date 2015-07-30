@@ -1,5 +1,5 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QSpinBox
+from qtpy.QtCore import Qt
+from qtpy.QtWidgets import QSpinBox
 
 
 class MySpinBox(QSpinBox):

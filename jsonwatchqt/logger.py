@@ -2,7 +2,7 @@
     Copyright (c) 2015 by Stefan Lehmann
 
 """
-from PyQt5.QtWidgets import QPlainTextEdit
+from qtpy.QtWidgets import QPlainTextEdit
 from datetime import datetime
 
 class LoggingWidget(QPlainTextEdit):

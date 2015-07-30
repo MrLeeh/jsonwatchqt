@@ -1,8 +1,8 @@
 import sys
 import json
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QWidget, QLabel, QGridLayout, QApplication, \
+from qtpy.QtCore import Qt
+from qtpy.QtWidgets import QWidget, QLabel, QGridLayout, QApplication, \
     QPushButton, QDialog, QCheckBox
 from serial.serialutil import SerialException
 from jsonwatch.jsonnode import JsonNode

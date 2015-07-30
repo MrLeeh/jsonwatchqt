@@ -7,9 +7,9 @@ import sys
 import re
 import logging
 
-from PyQt5.QtCore import QModelIndex, Qt, QAbstractItemModel, QMimeData, \
+from qtpy.QtCore import QModelIndex, Qt, QAbstractItemModel, QMimeData, \
     QByteArray, QDataStream, QIODevice, QPoint
-from PyQt5.QtWidgets import QTreeView, QItemDelegate, QSpinBox, \
+from qtpy.QtWidgets import QTreeView, QItemDelegate, QSpinBox, \
     QDoubleSpinBox, QMenu, QAction, QInputDialog, QDialog
 
 from jsonwatch.abstractjsonitem import AbstractJsonItem
@@ -144,14 +144,19 @@ class JsonDataModel(QAbstractItemModel):
             if isinstance(node, JsonItem):
                 if node.type in ('float', 'int', None):
                     node.value = value
-                self.dataChanged.emit(index, index, [Qt.EditRole])
-                return True
+                try: # PyQt5
+                    self.dataChanged.emit(index, index, [Qt.EditRole])
+                except TypeError: # PyQt4, PySide
+                    self.dataChanged.emit(index, index)
 
         elif role == Qt.CheckStateRole:
             if isinstance(node, JsonItem):
                 if node.type == 'bool':
                     node.value = value == Qt.Checked
-                    self.dataChanged.emit(index, index, [Qt.CheckStateRole])
+                    try: # PyQt5
+                        self.dataChanged.emit(index, index, [Qt.CheckStateRole])
+                    except TypeError: # PyQt4, PySide
+                        self.dataChanged.emit(index, index)
                     return True
         return False
 
@@ -206,7 +211,11 @@ class JsonDataModel(QAbstractItemModel):
         return Qt.CopyAction | Qt.MoveAction
 
     def refresh(self):
-        self.dataChanged.emit(QModelIndex(), QModelIndex(), [Qt.DisplayRole])
+        try: # PyQt5
+            self.dataChanged.emit(QModelIndex(), QModelIndex(), [Qt.DisplayRole])
+        except TypeError: # PyQt4, PySide
+            self.dataChanged.emit(QModelIndex(), QModelIndex())
+
 
     def node_from_index(self, index):
         return index.internalPointer() if index.isValid() else self.root
@@ -273,7 +282,7 @@ class ObjectExplorer(QTreeView):
         self.removeitemAction = QAction(self.tr("Remove item"), self)
         self.removeitemAction.triggered.connect(self.remove_item)
 
-    def data_changed(self, topleft, bottomright, roles):
+    def data_changed(self, topleft, bottomright, *args):
         node = topleft.internalPointer()
         if node is not None and isinstance(node, JsonItem):
             self.nodevalue_changed.emit(node)
@@ -297,7 +306,10 @@ class ObjectExplorer(QTreeView):
             )
             if not b: return
             node.key = key
-            self.model().dataChanged.emit(index, index, [Qt.DisplayRole])
+            try: # PyQt5
+                self.model().dataChanged.emit(index, index, [Qt.DisplayRole])
+            except TypeError: # PyQt4, PySide
+                self.model().dataChanged.emit(index, index)
 
     def edit_value(self):
         index = self.currentIndex()

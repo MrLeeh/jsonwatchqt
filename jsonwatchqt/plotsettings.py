@@ -4,8 +4,8 @@
 
 """
 import sys
-from PyQt5.QtCore import QCoreApplication, QSettings
-from PyQt5.QtWidgets import QWidget, QCheckBox, QApplication, QGridLayout, \
+from qtpy.QtCore import QCoreApplication, QSettings
+from qtpy.QtWidgets import QWidget, QCheckBox, QApplication, QGridLayout, \
     QLabel, QDoubleSpinBox, QRadioButton, QButtonGroup, QGroupBox, QVBoxLayout
 from pyqtconfig.config import QSettingsManager
 
@@ -21,30 +21,25 @@ class CoordSpinBox(QDoubleSpinBox):
 class PlotSettingsWidget(QWidget):
     def __init__(self, settings, parent=None):
         super().__init__(parent)
-        self.settings = settings
         # xmin
         self.xminLabel = QLabel(self.tr('xmin:'))
         self.xminSpinBox = CoordSpinBox()
         self.xminLabel.setBuddy(self.xminSpinBox)
-        self.settings.add_handler('plot/xmin', self.xminSpinBox, default=0.0)
 
         # xmax
         self.xmaxLabel = QLabel(self.tr('xmax:'))
         self.xmaxSpinBox = CoordSpinBox()
         self.xmaxLabel.setBuddy(self.xmaxSpinBox)
-        self.settings.add_handler('plot/xmax', self.xmaxSpinBox, default=10.0)
 
         # ymin
         self.yminLabel = QLabel(self.tr('ymin:'))
         self.yminSpinBox = CoordSpinBox()
         self.yminLabel.setBuddy(self.yminSpinBox)
-        self.settings.add_handler('plot/ymin', self.yminSpinBox, default=-10.0)
 
         #ymax
         self.ymaxLabel = QLabel(self.tr('ymax:'))
         self.ymaxSpinBox = CoordSpinBox()
         self.ymaxLabel.setBuddy(self.ymaxSpinBox)
-        self.settings.add_handler('plot/ymax', self.ymaxSpinBox, default=10.0)
 
         # Autoscale Radio Group
         self.autoscaleButtonGroup = QButtonGroup()
@@ -70,9 +65,6 @@ class PlotSettingsWidget(QWidget):
         layout.addWidget(self.manualscaleRadioButton)
         self.autoscaleGroupBox.setLayout(layout)
 
-        self.settings.add_handler('plot/autoscaleoption',
-                                  self.autoscaleButtonGroup, default=[(0, True)])
-
         # Layout
         layout = QGridLayout()
         layout.addWidget(self.xminLabel, 1, 0)
@@ -86,6 +78,15 @@ class PlotSettingsWidget(QWidget):
         layout.addWidget(self.autoscaleGroupBox, 5, 0, 1, 2)
         layout.setRowStretch(6, 1)
         self.setLayout(layout)
+
+        # settings
+        self.settings = settings
+        self.settings.add_handler('plot/xmin', self.xminSpinBox)
+        self.settings.add_handler('plot/xmax', self.xmaxSpinBox)
+        self.settings.add_handler('plot/ymin', self.yminSpinBox)
+        self.settings.add_handler('plot/ymax', self.ymaxSpinBox)
+        self.settings.add_handler('plot/autoscaleoption',
+                                  self.autoscaleButtonGroup)
 
     def refresh(self, state):
         pass

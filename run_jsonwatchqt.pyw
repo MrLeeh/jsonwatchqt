@@ -1,15 +1,23 @@
 #!/usr/bin/env python
 
+import os
 import sys
+
+os.environ['QT_API'] = 'PySide' # 'PySide', 'PyQt5'
+
+# for PyQt5 integration
+pythonpath = os.path.join(os.path.split(sys.executable)[0], os.pardir)
+os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = \
+    os.path.join(pythonpath, "Lib\site-packages\PyQt5\plugins\platforms")
+
 import logging
 import argparse
 from jsonwatchqt.mainwindow import MainWindow
-from PyQt5.QtCore import QCoreApplication, QSettings
-from PyQt5.QtWidgets import QApplication
-
+from qtpy.QtCore import QCoreApplication, QSettings
+from qtpy.QtWidgets import QApplication
 
 # argparser
-parser = argparse.ArgumentParser(description="Run JsonWatchQt GUI.")
+parser = argparse.ArgumentParser(description="run jsonwatchqt")
 parser.add_argument('--clear',
                     help="clear settings",
                     action='store_true')

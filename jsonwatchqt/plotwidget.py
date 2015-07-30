@@ -5,21 +5,24 @@
 import datetime
 import os
 import sys
-from PyQt5.QtCore import QByteArray, QIODevice, QDataStream, QSettings
-from PyQt5.QtGui import QDragEnterEvent, QDropEvent
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QApplication
-from pyqtconfig.config import QSettingsManager
+from qtpy.QtCore import QByteArray, QIODevice, QDataStream, QSettings
+from qtpy.QtGui import QDragEnterEvent, QDropEvent
+from qtpy.QtWidgets import QWidget, QVBoxLayout, QApplication
 from jsonwatch.jsonnode import JsonNode
-
-os.environ['QT_API'] = 'pyqt5'
 
 import matplotlib
 
-matplotlib.use("Qt5agg")
+if os.environ['QT_API'].lower() in ('pyside', 'pyqt4'):
+    matplotlib.use("Qt4agg")
+    from matplotlib.backends.backend_qt4agg import \
+        FigureCanvasQTAgg as FigureCanvas, \
+        NavigationToolbar2QT as NavigationToolbar
+else:
+    matplotlib.use("Qt5agg")
+    from matplotlib.backends.backend_qt5agg import \
+        FigureCanvasQTAgg as FigureCanvas, \
+        NavigationToolbar2QT as NavigationToolbar
 
-from matplotlib.backends.backend_qt5agg import \
-    FigureCanvasQTAgg as FigureCanvas, \
-    NavigationToolbar2QT as NavigationToolbar
 import pylab
 
 
