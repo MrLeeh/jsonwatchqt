@@ -1,0 +1,2 @@
+include versioneer.py
+include jsonwatchqt/_version.py

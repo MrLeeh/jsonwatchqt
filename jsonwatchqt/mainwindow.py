@@ -13,7 +13,7 @@ import os
 
 import serial
 from qtpy.QtWidgets import QAction, QDialog, QMainWindow, QMessageBox, \
-    QDockWidget, QLabel, QFileDialog
+    QDockWidget, QLabel, QFileDialog, QApplication
 from qtpy.QtCore import QSettings, QCoreApplication, Qt, QThread, \
     Signal
 
@@ -25,14 +25,27 @@ from jsonwatchqt.logger import LoggingWidget
 from jsonwatchqt.utilities import critical
 from pyqtconfig.config import QSettingsManager
 from jsonwatchqt.plotsettings import PlotSettingsWidget
-from jsonwatchqt.settingswidget import CtrlSettingsWidget
 from jsonwatchqt.objectexplorer import ObjectExplorer
 from jsonwatchqt.plotwidget import PlotWidget
 from jsonwatchqt.serialdialog import SerialDialog
 
 
 logger = logging.getLogger("jsonwatchqt.mainwindow")
-utf8_to_bytearray = lambda x: bytearray(x, 'utf-8')
+WINDOWSTATE_SETTING = "mainwindow/windowstate"
+GEOMETRY_SETTING = "mainwindow/geometry"
+FILENAME_SETTING = "mainwindow/filename"
+
+
+def strip(s):
+    return s.strip()
+
+
+def utf8_to_bytearray(x):
+    return bytearray(x, 'utf-8')
+
+
+def bytearray_to_utf8(x):
+    return x.decode('utf-8')
 
 
 class SerialWorker(QThread):
@@ -44,14 +57,11 @@ class SerialWorker(QThread):
         self._quit = False
 
     def run(self):
-        utf8decode = lambda s: s.decode('utf-8')
-        strip = lambda s: s.strip()
-
         while not self._quit:
             try:
                 if self.serial.isOpen() and self.serial.inWaiting():
                     self.data_received.emit(
-                        strip(utf8decode(self.serial.readline()))
+                        strip(bytearray_to_utf8(self.serial.readline()))
                     )
             except SerialException as e:
                 pass
@@ -66,13 +76,14 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.counter = 0
         self.serial = serial.Serial()
-        self.rootnode = JsonNode('root')
+        self.rootnode = JsonNode('')
         self.settings = QSettingsManager()
         self._dirty = False
         self._filename = None
 
         # Controller Settings
         self.settingsDialog = None
+
         # object explorer
         self.objectexplorer = ObjectExplorer(self.rootnode, self)
         self.objectexplorer.nodevalue_changed.connect(self.send_serialdata)
@@ -80,7 +91,8 @@ class MainWindow(QMainWindow):
         self.objectexplorerDockWidget = QDockWidget(
             self.tr("object explorer"), self
         )
-        self.objectexplorerDockWidget.setObjectName("objectexplorer_dockwidget")
+        self.objectexplorerDockWidget.setObjectName(
+            "objectexplorer_dockwidget")
         self.objectexplorerDockWidget.setWidget(self.objectexplorer)
 
         # plot settings
@@ -88,7 +100,8 @@ class MainWindow(QMainWindow):
         self.plotsettingsDockWidget = QDockWidget(
             self.tr("plot settings"), self
         )
-        self.plotsettingsDockWidget.setObjectName("plotsettings_dockwidget")
+        self.plotsettingsDockWidget.setObjectName(
+            "plotsettings_dockwidget")
         self.plotsettingsDockWidget.setWidget(self.plotsettings)
 
         # log widget
@@ -126,9 +139,6 @@ class MainWindow(QMainWindow):
         self.serialdlgAction = QAction(self.tr("Serial Settings..."), self)
         self.serialdlgAction.setShortcut("F6")
         self.serialdlgAction.triggered.connect(self.show_serialdlg)
-        # Settings Dialog
-        self.settingsdlgAction = QAction(self.tr("Settings..."), self)
-        self.settingsdlgAction.triggered.connect(self.show_settingsdlg)
         # Connect
         self.connectAction = QAction(self.tr("Connect"), self)
         self.connectAction.setShortcut("F5")
@@ -153,6 +163,10 @@ class MainWindow(QMainWindow):
         self.newAction = QAction(self.tr("New"), self)
         self.newAction.setShortcut("Ctrl+N")
         self.newAction.triggered.connect(self.new)
+        # Info
+        self.infoAction = QAction(self.tr("Info"), self)
+        self.infoAction.setShortcut("F1")
+        self.infoAction.triggered.connect(self.show_info)
 
     def _init_menus(self):
         # file menu
@@ -173,40 +187,27 @@ class MainWindow(QMainWindow):
         self.viewMenu.addAction(self.plotsettingsDockWidget.toggleViewAction())
         self.viewMenu.addAction(self.loggingDockWidget.toggleViewAction())
 
-        # extras menu
-        self.extrasMenu = self.menuBar().addMenu(self.tr("Extras"))
-        self.extrasMenu.addAction(self.settingsdlgAction)
+        self.menuBar().addAction(self.infoAction)
 
-
-    @property
-    def filename(self):
-        return self._filename
-
-    @filename.setter
-    def filename(self, value=""):
-        self._filename = value
-        self.refresh_windowTitle()
-
-    @property
-    def dirty(self):
-        return self._dirty
-
-    @dirty.setter
-    def dirty(self, value):
-        self._dirty = value
-        self.refresh_windowTitle()
-
-    def set_dirty(self):
-        self.dirty = True
+    def show_info(self):
+        dlg = QMessageBox.about(
+            self, QApplication.applicationName(),
+            "%s %s\n"
+            "Copyright (c) by %s" %
+            (
+                QCoreApplication.applicationName(),
+                QCoreApplication.applicationVersion(),
+                QCoreApplication.organizationName(),
+            )
+        )
 
     def load_config(self, filename):
-        decode = lambda x: x.decode('utf-8')
         self.filename = filename
         try:
             with open(filename, 'rb') as f:
                 try:
                     self.objectexplorer.model().beginResetModel()
-                    self.rootnode.load(decode(f.read()))
+                    self.rootnode.load(bytearray_to_utf8(f.read()))
                     self.objectexplorer.model().endResetModel()
                 except ValueError as e:
                     critical(self, "File '%s' is not a valid config file."
@@ -219,24 +220,30 @@ class MainWindow(QMainWindow):
         self.objectexplorer.refresh()
 
     def load_settings(self):
-        try:
-            self.restoreState(self.settings.get("windowState"))
-        except TypeError:
-            logger.debug("error restoring window state")
+        settings = QSettings()
 
+        # window geometry
         try:
-            self.restoreGeometry(self.settings.get("windowGeometry"))
-        except TypeError:
+            self.restoreGeometry(settings.value(GEOMETRY_SETTING))
+        except:
             logger.debug("error restoring window geometry")
 
-        self.filename = self.settings.get("filename")
+        # window state
+        try:
+            self.restoreState(settings.value(WINDOWSTATE_SETTING))
+        except:
+            logger.debug("error restoring window state")
+
+        # filename
+        self.filename = settings.value(FILENAME_SETTING)
         if self.filename is not None:
             self.load_config(self.filename)
 
     def save_settings(self):
-        self.settings.set("windowState", self.saveState())
-        self.settings.set("windowGeometry", self.saveGeometry())
-        self.settings.set("filename", self.filename)
+        settings = QSettings()
+        settings.setValue(WINDOWSTATE_SETTING, self.saveState())
+        settings.setValue(GEOMETRY_SETTING, self.saveGeometry())
+        settings.setValue(FILENAME_SETTING, self.filename)
 
     def closeEvent(self, event):
         if self.dirty:
@@ -251,7 +258,8 @@ class MainWindow(QMainWindow):
             if res == QMessageBox.Cancel:
                 event.ignore()
                 return
-            elif res == QMessageBox.Yes: self.save_config()
+            elif res == QMessageBox.Yes:
+                self.save_config()
 
         self.save_settings()
 
@@ -264,13 +272,6 @@ class MainWindow(QMainWindow):
             self.serial.close()
         except (SerialException, AttributeError):
             pass
-
-    def init_jsonobjects(self):
-        decode = lambda x: x.decode('utf-8')
-        read = lambda x: x.read()
-
-        # with open("c:/Users/Lehmann/data/python34/jsonwatch/tests/mycfg.json", 'rb') as f:
-        #     self.rootnode.load(decode(read(f)))
 
     def new(self):
         self.objectexplorer.model().beginResetModel()
@@ -310,12 +311,6 @@ class MainWindow(QMainWindow):
         if dlg.exec_() == QDialog.Accepted:
 
             settings.setValue("serial/port", dlg.port)
-
-    def show_settingsdlg(self):
-        if self.settingsDialog is None:
-            self.settingsDialog = CtrlSettingsWidget(
-                self.serial, self.rootnode['settings'], self)
-        self.settingsDialog.show()
 
     def toggle_connect(self):
         if self.serial.isOpen():
@@ -388,12 +383,16 @@ class MainWindow(QMainWindow):
             self.show_savecfg_dlg()
 
     def show_opencfg_dlg(self):
+        # show file dialog
         filename, _ = QFileDialog.getOpenFileName(
             self, self.tr("Open configuration file..."),
             directory=os.path.expanduser("~"),
             filter=self.tr("Json file (*.json);;All files (*.*)")
         )
-        if filename: self.load_config(filename)
+
+        # load config file
+        if filename:
+            self.load_config(filename)
 
     def refresh_windowTitle(self):
         s = "%s %s" % (QCoreApplication.applicationName(),
@@ -403,3 +402,26 @@ class MainWindow(QMainWindow):
         if self.dirty:
             s += "*"
         self.setWindowTitle(s)
+
+    # filename property
+    @property
+    def filename(self):
+        return self._filename
+
+    @filename.setter
+    def filename(self, value=""):
+        self._filename = value
+        self.refresh_windowTitle()
+
+    # dirty property
+    @property
+    def dirty(self):
+        return self._dirty
+
+    @dirty.setter
+    def dirty(self, value):
+        self._dirty = value
+        self.refresh_windowTitle()
+
+    def set_dirty(self):
+        self.dirty = True

@@ -13,6 +13,7 @@ os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = \
 import logging
 import argparse
 from jsonwatchqt.mainwindow import MainWindow
+from jsonwatch._version import get_versions
 from qtpy.QtCore import QCoreApplication, QSettings
 from qtpy.QtWidgets import QApplication
 
@@ -32,8 +33,8 @@ logging.basicConfig(
 app = QApplication(sys.argv)
 QCoreApplication.setOrganizationName("Stefan Lehmann")
 QCoreApplication.setApplicationName("JsonWatchQt")
-QCoreApplication.setApplicationVersion("0.0.1")
-if args.clear: QSettings().clear()
+QCoreApplication.setApplicationVersion(get_versions()['version'])
+# if args.clear: QSettings().clear()
 
 # Open Mainwindow
 w = MainWindow()
