@@ -82,8 +82,9 @@ class MyItemDelegate(QItemDelegate):
 
 class JsonDataModel(QAbstractItemModel):
 
-    def __init__(self, rootnode: JsonNode, parent=None):
+    def __init__(self, rootnode: JsonNode, mainwindow, parent=None):
         super().__init__(parent)
+        self.mainwindow = mainwindow
         self.root = rootnode
         self.root.child_added_callback = self.insert_row
         self.columns = [
@@ -140,7 +141,7 @@ class JsonDataModel(QAbstractItemModel):
 
         elif role == Qt.DecorationRole:
             if column.name == 'key':
-                if node.up_to_date:
+                if node.up_to_date and self.mainwindow.connected:
                     return QPixmap(os.path.join(image_path,
                                                 "emblem_uptodate.png"))
                 else:
@@ -268,9 +269,10 @@ class ObjectExplorer(QTreeView):
     nodevalue_changed = pyqtSignal(AbstractJsonItem)
     nodeproperty_changed = pyqtSignal(AbstractJsonItem)
 
-    def __init__(self, rootnode: JsonNode, parent=None):
+    def __init__(self, rootnode: JsonNode, parent):
         super().__init__(parent)
-        self.setModel(JsonDataModel(rootnode))
+        self.mainwindow = parent
+        self.setModel(JsonDataModel(rootnode, self.mainwindow))
         self.model().dataChanged.connect(self.data_changed)
         self.setItemDelegate(MyItemDelegate())
         self.setDragDropMode(QTreeView.DragDrop)

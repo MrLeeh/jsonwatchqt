@@ -1,7 +1,23 @@
 Licenses for image files
 
+document-open-7.png / oxygen / CC-BY-SA 3.0 or LGPL
+document-save-5.png / oxygen / CC-BY-SA 3.0 or LGPL
+document-save-as-5.png / oxygen / CC-BY-SA 3.0 or LGPL
+emblem_outofdate.png / Stefan Lehmann / MIT
+emplem_uptodate.png / Stefan Lehmann / MIT
+media-playback-stop-8.png / oxygen / CC-BY-SA 3.0 or LGPL
+media-record-6.png / oxygen / CC-BY-SA 3.0 or LGPL
+network-connect-3.png / oxygen / CC-BY-SA 3.0 or LGPL
+network-disconnect-3.png / oxygen / CC-BY-SA 3.0 or LGPL
+window-close-3.png / oxygen / CC-BY-SA 3.0 or LGPL
+
 MIT License (MIT)
     link: http://creativecommons.org/licenses/MIT/
 
-emblem_outofdate.png / Stefan Lehmann / MIT
-emplem_uptodate.png / Stefan Lehmann / MIT
+Oxygen Icons 4.3.1 (KDE) (oxygen)
+    link: http://www.oxygen-icons.org/
+    license: Dual: CC-BY-SA 3.0 or LGPL
+    License link: http://creativecommons.org/licenses/by-sa/3.0/
+            http://creativecommons.org/licenses/LGPL/2.1/
+    formats: svg, png
+    subdirectory: open_icon_library-devel/icons/oxygen

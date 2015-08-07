@@ -6,27 +6,28 @@
 
 """
 
+import os
 import datetime
 import logging
 import json
-import os
 
 import serial
 from qtpy.QtWidgets import QAction, QDialog, QMainWindow, QMessageBox, \
-    QDockWidget, QLabel, QFileDialog, QApplication
+    QDockWidget, QLabel, QFileDialog, QApplication, QPixmap
 from qtpy.QtCore import QSettings, QCoreApplication, Qt, QThread, \
     Signal
 
 from serial.serialutil import SerialException
 from jsonwatch.jsonitem import JsonItem
-
 from jsonwatch.jsonnode import JsonNode
 from jsonwatchqt.logger import LoggingWidget
 from pyqtconfig.config import QSettingsManager
 from jsonwatchqt.plotsettings import PlotSettingsWidget
 from jsonwatchqt.objectexplorer import ObjectExplorer
 from jsonwatchqt.plotwidget import PlotWidget
-from jsonwatchqt.serialdialog import SerialDialog
+from jsonwatchqt.serialdialog import SerialDialog, PORT_SETTING, \
+    BAUDRATE_SETTING
+from jsonwatchqt.utilities import critical, image_path
 
 
 logger = logging.getLogger("jsonwatchqt.mainwindow")
@@ -47,6 +48,10 @@ def bytearray_to_utf8(x):
     return x.decode('utf-8')
 
 
+def pixmap(filename):
+    return QPixmap(os.path.join(image_path, filename))
+
+
 class SerialWorker(QThread):
     data_received = Signal(str)
 
@@ -62,7 +67,7 @@ class SerialWorker(QThread):
                     self.data_received.emit(
                         strip(bytearray_to_utf8(self.serial.readline()))
                     )
-            except SerialException as e:
+            except SerialException:
                 pass
 
     def quit(self):
@@ -77,6 +82,7 @@ class MainWindow(QMainWindow):
         self.serial = serial.Serial()
         self.rootnode = JsonNode('')
         self.settings = QSettingsManager()
+        self._connected = False
         self._dirty = False
         self._filename = None
 
@@ -127,9 +133,12 @@ class MainWindow(QMainWindow):
 
         # Layout
         self.setCentralWidget(self.plot)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.objectexplorerDockWidget)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.plotsettingsDockWidget)
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.loggingDockWidget)
+        self.addDockWidget(
+            Qt.LeftDockWidgetArea, self.objectexplorerDockWidget)
+        self.addDockWidget(
+            Qt.LeftDockWidgetArea, self.plotsettingsDockWidget)
+        self.addDockWidget(
+            Qt.BottomDockWidgetArea, self.loggingDockWidget)
 
         self.load_settings()
 
@@ -138,30 +147,59 @@ class MainWindow(QMainWindow):
         self.serialdlgAction = QAction(self.tr("Serial Settings..."), self)
         self.serialdlgAction.setShortcut("F6")
         self.serialdlgAction.triggered.connect(self.show_serialdlg)
+
         # Connect
         self.connectAction = QAction(self.tr("Connect"), self)
         self.connectAction.setShortcut("F5")
+        self.connectAction.setIcon(pixmap("network-connect-3.png"))
         self.connectAction.triggered.connect(self.toggle_connect)
+
         # Quit
         self.quitAction = QAction(self.tr("Quit"), self)
         self.quitAction.setShortcut("Alt+F4")
+        self.quitAction.setIcon(pixmap("window-close-3.png"))
         self.quitAction.triggered.connect(self.close)
+
         # Save Config as
-        self.savecfgasAction = QAction(self.tr("Save as..."), self)
-        self.savecfgasAction.setShortcut("Ctrl+Shift+S")
-        self.savecfgasAction.triggered.connect(self.show_savecfg_dlg)
-        # Save Config
-        self.savecfgAction = QAction(self.tr("Save"), self)
-        self.savecfgAction.setShortcut("Ctrl+S")
-        self.savecfgAction.triggered.connect(self.save_config)
-        # Load Config
-        self.loadcfgAction = QAction(self.tr("Open..."), self)
-        self.loadcfgAction.setShortcut("Ctrl+O")
-        self.loadcfgAction.triggered.connect(self.show_opencfg_dlg)
+        self.saveasAction = QAction(self.tr("Save as..."), self)
+        self.saveasAction.setShortcut("Ctrl+Shift+S")
+        self.saveasAction.setIcon(pixmap("document-save-as-5.png"))
+        self.saveasAction.triggered.connect(self.show_savecfg_dlg)
+
+        # Save file
+        self.saveAction = QAction(self.tr("Save"), self)
+        self.saveAction.setShortcut("Ctrl+S")
+        self.saveAction.setIcon(pixmap("document-save-5.png"))
+        self.saveAction.triggered.connect(self.save_file)
+
+        # Load file
+        self.loadAction = QAction(self.tr("Open..."), self)
+        self.loadAction.setShortcut("Ctrl+O")
+        self.loadAction.setIcon(pixmap("document-open-7.png"))
+        self.loadAction.triggered.connect(self.show_opencfg_dlg)
+
         # New
         self.newAction = QAction(self.tr("New"), self)
         self.newAction.setShortcut("Ctrl+N")
+        self.newAction.setIcon(pixmap("document-new-6.png"))
         self.newAction.triggered.connect(self.new)
+
+        # start recording
+        self.startrecordingAction = QAction(self.tr("Start recording"), self)
+        self.startrecordingAction.setShortcut("F9")
+        self.startrecordingAction.setIcon(pixmap("media-record-6.png"))
+        self.startrecordingAction.triggered.connect(self.start_recording)
+
+        # stop recording
+        self.stoprecordingAction = QAction(self.tr("Stop recording"), self)
+        self.stoprecordingAction.setShortcut("F10")
+        self.stoprecordingAction.setIcon(pixmap("media-playback-stop-8.png"))
+        self.stoprecordingAction.triggered.connect(self.stop_recording)
+
+        # show record settings
+        self.recordsettingsAction = QAction(self.tr("Settings..."), self)
+        self.recordsettingsAction.triggered.connect(self.show_recordsettings)
+
         # Info
         self.infoAction = QAction(self.tr("Info"), self)
         self.infoAction.setShortcut("F1")
@@ -171,9 +209,9 @@ class MainWindow(QMainWindow):
         # file menu
         self.fileMenu = self.menuBar().addMenu(self.tr("File"))
         self.fileMenu.addAction(self.newAction)
-        self.fileMenu.addAction(self.loadcfgAction)
-        self.fileMenu.addAction(self.savecfgAction)
-        self.fileMenu.addAction(self.savecfgasAction)
+        self.fileMenu.addAction(self.loadAction)
+        self.fileMenu.addAction(self.saveAction)
+        self.fileMenu.addAction(self.saveasAction)
         self.fileMenu.addSeparator()
         self.fileMenu.addAction(self.connectAction)
         self.fileMenu.addAction(self.serialdlgAction)
@@ -182,14 +220,21 @@ class MainWindow(QMainWindow):
 
         # view menu
         self.viewMenu = self.menuBar().addMenu(self.tr("View"))
-        self.viewMenu.addAction(self.objectexplorerDockWidget.toggleViewAction())
+        self.viewMenu.addAction(
+            self.objectexplorerDockWidget.toggleViewAction())
         self.viewMenu.addAction(self.plotsettingsDockWidget.toggleViewAction())
         self.viewMenu.addAction(self.loggingDockWidget.toggleViewAction())
 
+        # record menu
+        self.recordMenu = self.menuBar().addMenu(self.tr("Record"))
+        self.recordMenu.addAction(self.startrecordingAction)
+        self.recordMenu.addAction(self.stoprecordingAction)
+
+        # info menu
         self.menuBar().addAction(self.infoAction)
 
     def show_info(self):
-        dlg = QMessageBox.about(
+        QMessageBox.about(
             self, QApplication.applicationName(),
             "%s %s\n"
             "Copyright (c) by %s" %
@@ -200,8 +245,10 @@ class MainWindow(QMainWindow):
             )
         )
 
-    def load_config(self, filename):
+    def load_file(self, filename):
+        old_filename = self.filename if self.filename != filename else None
         self.filename = filename
+
         try:
             with open(filename, 'rb') as f:
                 try:
@@ -212,10 +259,15 @@ class MainWindow(QMainWindow):
                     critical(self, "File '%s' is not a valid config file."
                              % filename)
                     logger.error(str(e))
-                    self.filename = None
+                    if old_filename is not None:
+                        self.load_file(old_filename)
+                    else:
+                        self.filename = None
+
         except FileNotFoundError as e:
             logger.error(str(e))
             self.filename = None
+
         self.objectexplorer.refresh()
 
     def load_settings(self):
@@ -236,7 +288,7 @@ class MainWindow(QMainWindow):
         # filename
         self.filename = settings.value(FILENAME_SETTING)
         if self.filename is not None:
-            self.load_config(self.filename)
+            self.load_file(self.filename)
 
     def save_settings(self):
         settings = QSettings()
@@ -258,7 +310,7 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
             elif res == QMessageBox.Yes:
-                self.save_config()
+                self.save_file()
 
         self.save_settings()
 
@@ -300,16 +352,8 @@ class MainWindow(QMainWindow):
                 self.loggingWidget.log_output(s.strip())
 
     def show_serialdlg(self):
-        settings = QSettings()
-        dlg = SerialDialog(self)
-        try:
-            dlg.port = settings.value("serial/port")
-        except ValueError:
-            pass
-
-        if dlg.exec_() == QDialog.Accepted:
-
-            settings.setValue("serial/port", dlg.port)
+        dlg = SerialDialog(self.settings, self)
+        dlg.exec_()
 
     def toggle_connect(self):
         if self.serial.isOpen():
@@ -319,19 +363,20 @@ class MainWindow(QMainWindow):
 
     def connect(self):
         # Load port setting
-        settings = QSettings()
-        port = settings.value("serial/port")
+        port = self.settings.get(PORT_SETTING)
+        baudrate = self.settings.get(BAUDRATE_SETTING)
 
         # If no port has been selected before show serial settings dialog
         if port is None:
             if self.show_serialdlg() == QDialog.Rejected:
                 return
-            port = settings.value("serial/port")
+            port = self.settings.get(PORT_SETTING)
+            baudrate = self.settings.get(BAUDRATE_SETTING)
 
         # Serial connection
         try:
             self.serial.setPort(port)
-            self.serial.setBaudrate(9600)
+            self.serial.setBaudrate(baudrate)
             self.serial.open()
         except ValueError:
             QMessageBox.critical(
@@ -351,15 +396,22 @@ class MainWindow(QMainWindow):
             self.worker.start()
 
             self.connectAction.setText(self.tr("Disconnect"))
+            self.connectAction.setIcon(pixmap("network-disconnect-3.png"))
             self.serialdlgAction.setEnabled(False)
-            self.connectionstateLabel.setText(self.tr("Connected to %s") % port)
+            self.connectionstateLabel.setText(
+                self.tr("Connected to %s") % port)
+            self._connected = True
+            self.objectexplorer.refresh()
 
     def disconnect(self):
         self.worker.quit()
         self.serial.close()
         self.connectAction.setText(self.tr("Connect"))
+        self.connectAction.setIcon(pixmap("network-connect-3.png"))
         self.serialdlgAction.setEnabled(True)
         self.connectionstateLabel.setText(self.tr("Not connected"))
+        self._connected = False
+        self.objectexplorer.refresh()
 
     def show_savecfg_dlg(self):
         filename, _ = QFileDialog.getSaveFileName(
@@ -370,9 +422,9 @@ class MainWindow(QMainWindow):
 
         if filename:
             self.filename = filename
-            self.save_config()
+            self.save_file()
 
-    def save_config(self):
+    def save_file(self):
         if self.filename is not None:
             config_string = self.rootnode.dump()
             with open(self.filename, 'w') as f:
@@ -391,9 +443,9 @@ class MainWindow(QMainWindow):
 
         # load config file
         if filename:
-            self.load_config(filename)
+            self.load_file(filename)
 
-    def refresh_windowTitle(self):
+    def refresh_window_title(self):
         s = "%s %s" % (QCoreApplication.applicationName(),
                        QCoreApplication.applicationVersion())
         if self.filename is not None:
@@ -401,6 +453,15 @@ class MainWindow(QMainWindow):
         if self.dirty:
             s += "*"
         self.setWindowTitle(s)
+
+    def start_recording(self):
+        pass
+
+    def stop_recording(self):
+        pass
+
+    def show_recordsettings(self):
+        pass
 
     # filename property
     @property
@@ -410,7 +471,7 @@ class MainWindow(QMainWindow):
     @filename.setter
     def filename(self, value=""):
         self._filename = value
-        self.refresh_windowTitle()
+        self.refresh_window_title()
 
     # dirty property
     @property
@@ -420,7 +481,12 @@ class MainWindow(QMainWindow):
     @dirty.setter
     def dirty(self, value):
         self._dirty = value
-        self.refresh_windowTitle()
+        self.refresh_window_title()
 
     def set_dirty(self):
         self.dirty = True
+
+    # connected property
+    @property
+    def connected(self):
+        return self._connected
