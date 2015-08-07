@@ -2,7 +2,7 @@
     Copyright (c) 2015 by Stefan Lehmann
 
 """
-
+import os
 import sys
 import re
 import logging
@@ -10,12 +10,13 @@ import logging
 from qtpy.QtCore import QModelIndex, Qt, QAbstractItemModel, QMimeData, \
     QByteArray, QDataStream, QIODevice, QPoint
 from qtpy.QtWidgets import QTreeView, QItemDelegate, QSpinBox, \
-    QDoubleSpinBox, QMenu, QAction, QInputDialog, QDialog, QFont, QColor
+    QDoubleSpinBox, QMenu, QAction, QInputDialog, QDialog, QColor, QPixmap
 
 from jsonwatch.abstractjsonitem import AbstractJsonItem
 from jsonwatch.jsonnode import JsonNode
 from jsonwatch.jsonitem import JsonItem
 from jsonwatchqt.itemproperties import ItemPropertyDialog
+from jsonwatchqt.utilities import image_path
 from pyqtconfig.qt import pyqtSignal
 
 
@@ -66,7 +67,7 @@ class MyItemDelegate(QItemDelegate):
             if node.type in ('int', 'float'):
                 try:
                     editor.setValue(node.value)
-                except TypeError as e:
+                except TypeError:
                     pass
             else:
                 return super().setEditorData(editor, index)
@@ -137,10 +138,14 @@ class JsonDataModel(QAbstractItemModel):
                     if node.type == 'bool':
                         return Qt.Checked if node.value else Qt.Unchecked
 
-        elif role == Qt.ForegroundRole:
-            if not node.up_to_date:
-                return QColor('lightGray')
-
+        elif role == Qt.DecorationRole:
+            if column.name == 'key':
+                if node.up_to_date:
+                    return QPixmap(os.path.join(image_path,
+                                                "emblem_uptodate.png"))
+                else:
+                    return QPixmap(os.path.join(image_path,
+                                                "emblem_outofdate.png"))
 
     def setData(self, index: QModelIndex, value, role=Qt.EditRole):
         if not index.isValid():

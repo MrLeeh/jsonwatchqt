@@ -5,6 +5,9 @@ import sys
 
 os.environ['QT_API'] = 'PySide' # 'PySide', 'PyQt5'
 
+from jsonwatchqt.utilities import image_path
+print(image_path)
+
 # for PyQt5 integration
 pythonpath = os.path.join(os.path.split(sys.executable)[0], os.pardir)
 os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = \

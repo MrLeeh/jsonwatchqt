@@ -22,7 +22,6 @@ from jsonwatch.jsonitem import JsonItem
 
 from jsonwatch.jsonnode import JsonNode
 from jsonwatchqt.logger import LoggingWidget
-from jsonwatchqt.utilities import critical
 from pyqtconfig.config import QSettingsManager
 from jsonwatchqt.plotsettings import PlotSettingsWidget
 from jsonwatchqt.objectexplorer import ObjectExplorer

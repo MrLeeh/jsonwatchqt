@@ -1,0 +1,7 @@
+Licenses for image files
+
+MIT License (MIT)
+    link: http://creativecommons.org/licenses/MIT/
+
+emblem_outofdate.png / Stefan Lehmann / MIT
+emplem_uptodate.png / Stefan Lehmann / MIT
