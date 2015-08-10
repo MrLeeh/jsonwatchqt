@@ -10,13 +10,13 @@ import logging
 from qtpy.QtCore import QModelIndex, Qt, QAbstractItemModel, QMimeData, \
     QByteArray, QDataStream, QIODevice, QPoint
 from qtpy.QtWidgets import QTreeView, QItemDelegate, QSpinBox, \
-    QDoubleSpinBox, QMenu, QAction, QInputDialog, QDialog, QColor, QPixmap
+    QDoubleSpinBox, QMenu, QAction, QInputDialog, QDialog, QPixmap
 
 from jsonwatch.abstractjsonitem import AbstractJsonItem
 from jsonwatch.jsonnode import JsonNode
 from jsonwatch.jsonitem import JsonItem
 from jsonwatchqt.itemproperties import ItemPropertyDialog
-from jsonwatchqt.utilities import image_path
+from jsonwatchqt.utilities import pixmap
 from pyqtconfig.qt import pyqtSignal
 
 
@@ -142,11 +142,9 @@ class JsonDataModel(QAbstractItemModel):
         elif role == Qt.DecorationRole:
             if column.name == 'key':
                 if node.up_to_date and self.mainwindow.connected:
-                    return QPixmap(os.path.join(image_path,
-                                                "emblem_uptodate.png"))
+                    return pixmap("emblem_uptodate.png")
                 else:
-                    return QPixmap(os.path.join(image_path,
-                                                "emblem_outofdate.png"))
+                    return pixmap("emblem_outofdate.png")
 
     def setData(self, index: QModelIndex, value, role=Qt.EditRole):
         if not index.isValid():
@@ -195,12 +193,16 @@ class JsonDataModel(QAbstractItemModel):
         return ["application/x-nodepath.list"]
 
     def mimeData(self, indexes):
+        def path(x):
+            return "/".join(x.path)
+
+        def node(x):
+            return self.node_from_index(x)
+
         mimedata = QMimeData()
         data = QByteArray()
         stream = QDataStream(data, QIODevice.WriteOnly)
 
-        path = lambda x: '/'.join(x.path)
-        node = lambda x: self.node_from_index(x)
         for path in set(path(node(index)) for index
                         in indexes if index.isValid()):
             stream.writeQString(path)
@@ -286,21 +288,35 @@ class ObjectExplorer(QTreeView):
         self.customContextMenuRequested.connect(self.show_contextmenu)
 
         # actions
-        # propertiesAction
+        # properties action
         self.propertiesAction = QAction(self.tr("properties"), self)
+        self.propertiesAction.setIcon(pixmap("document_properties.png"))
         self.propertiesAction.triggered.connect(self.show_properties)
-        # editAction
+
+        # edit action
         self.editAction = QAction(self.tr("edit value"), self)
         self.editAction.setShortcut("F2")
+        self.editAction.setIcon(pixmap("edit.png"))
         self.editAction.triggered.connect(self.edit_value)
-        # Edit key
+
+        # edit key action
         self.editkeyAction = QAction(self.tr("edit key"), self)
+        self.editkeyAction.setIcon(pixmap("kgpg_key1_kgpg.png"))
         self.editkeyAction.triggered.connect(self.edit_key)
-        # insertitemAction
-        self.insertitemAction = QAction(self.tr("insert"), self)
-        self.insertitemAction.triggered.connect(self.new_item)
-        # Remove item
+
+        # insert item action
+        self.insertitemAction = QAction(self.tr("insert item"), self)
+        self.insertitemAction.setIcon(pixmap("list_add.png"))
+        self.insertitemAction.triggered.connect(self.insert_item)
+
+        # insert node action
+        self.insertnodeAction = QAction(self.tr("insert node"), self)
+        self.insertnodeAction.setIcon(pixmap("list_add.png"))
+        self.insertnodeAction.triggered.connect(self.insert_node)
+
+        # remove item action
         self.removeitemAction = QAction(self.tr("remove"), self)
+        self.removeitemAction.setIcon(pixmap("list_remove"))
         self.removeitemAction.triggered.connect(self.remove_item)
 
     def data_changed(self, topleft, bottomright, *args):
@@ -347,13 +363,12 @@ class ObjectExplorer(QTreeView):
         i = self.model().index(index.row(), 2, index.parent())
         self.edit(i)
 
-    def new_item(self):
+    def insert_item(self):
         index = self.currentIndex()
-
         if index.isValid():
             node = index.internalPointer()
             key, b = QInputDialog.getText(
-                self, "New Json item", "Insert key for new item:")
+                self, "Insert Json item", "Insert key for new item:")
 
             if not b:
                 return
@@ -363,6 +378,26 @@ class ObjectExplorer(QTreeView):
             row = node.index(item)
             self.model().beginInsertRows(index, row, row)
             self.model().endInsertRows()
+
+    def insert_node(self):
+        index = self.currentIndex()
+        parentnode = index.internalPointer() or self.model().root
+
+        key, b = QInputDialog.getText(
+            self, "Insert Json node", "Insert key for new node:")
+        if not b:
+            return
+        node = JsonNode(key)
+        parentnode.add(node)
+        row = parentnode.index(node)
+        self.model().beginInsertRows(index, row, row)
+        self.model().endInsertRows()
+
+    def mousePressEvent(self, event):
+        index = self.indexAt(event.pos())
+        if not index.isValid():
+            self.setCurrentIndex(QModelIndex())
+        super().mousePressEvent(event)
 
     def refresh(self):
         self.model().refresh()
@@ -381,29 +416,31 @@ class ObjectExplorer(QTreeView):
 
     def show_contextmenu(self, pos: QPoint):
         menu = QMenu(self)
-        if self.currentIndex().isValid():
-            node = self.currentIndex().internalPointer()
+        index = self.currentIndex()
+        node = index.internalPointer()
 
-            # insert
-            if isinstance(node, JsonNode):
-                menu.addAction(self.insertitemAction)
+        # insert item and node
+        menu.addAction(self.insertitemAction)
+        menu.addAction(self.insertnodeAction)
 
-            # edit key
+        # edit key
+        if isinstance(node, (JsonNode, JsonItem)):
+            menu.addSeparator()
             menu.addAction(self.editkeyAction)
-
-            # edit value
             if isinstance(node, JsonItem):
                 menu.addAction(self.editAction)
                 self.editAction.setEnabled(not node.readonly)
 
-            # remove
+        # remove
+        if isinstance(node, (JsonNode, JsonItem)):
+            menu.addSeparator()
             menu.addAction(self.removeitemAction)
 
-            # properties
-            if isinstance(node, JsonItem):
-                menu.addSeparator()
-                menu.addAction(self.propertiesAction)
-                menu.setDefaultAction(self.propertiesAction)
+        # properties
+        if isinstance(node, JsonItem):
+            menu.addSeparator()
+            menu.addAction(self.propertiesAction)
+            menu.setDefaultAction(self.propertiesAction)
 
         menu.popup(self.viewport().mapToGlobal(pos), self.editAction)
 

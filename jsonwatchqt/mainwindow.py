@@ -27,7 +27,8 @@ from jsonwatchqt.objectexplorer import ObjectExplorer
 from jsonwatchqt.plotwidget import PlotWidget
 from jsonwatchqt.serialdialog import SerialDialog, PORT_SETTING, \
     BAUDRATE_SETTING
-from jsonwatchqt.utilities import critical, image_path
+from jsonwatchqt.utilities import critical, pixmap
+from jsonwatchqt.recorder import tabulate, RecordWidget
 
 
 logger = logging.getLogger("jsonwatchqt.mainwindow")
@@ -46,10 +47,6 @@ def utf8_to_bytearray(x):
 
 def bytearray_to_utf8(x):
     return x.decode('utf-8')
-
-
-def pixmap(filename):
-    return QPixmap(os.path.join(image_path, filename))
 
 
 class SerialWorker(QThread):
@@ -117,6 +114,14 @@ class MainWindow(QMainWindow):
         self.loggingDockWidget.setObjectName("logging_dockwidget")
         self.loggingDockWidget.setWidget(self.loggingWidget)
 
+        # record widget
+        self.recordWidget = RecordWidget(self.rootnode, self)
+        self.recordDockWidget = QDockWidget(
+            self.tr("data recording"), self
+        )
+        self.recordDockWidget.setObjectName("record_dockwidget")
+        self.recordDockWidget.setWidget(self.recordWidget)
+
         # Plot Widget
         self.plot = PlotWidget(self.rootnode, self.settings, self)
 
@@ -133,12 +138,11 @@ class MainWindow(QMainWindow):
 
         # Layout
         self.setCentralWidget(self.plot)
-        self.addDockWidget(
-            Qt.LeftDockWidgetArea, self.objectexplorerDockWidget)
-        self.addDockWidget(
-            Qt.LeftDockWidgetArea, self.plotsettingsDockWidget)
-        self.addDockWidget(
-            Qt.BottomDockWidgetArea, self.loggingDockWidget)
+        self.addDockWidget(Qt.LeftDockWidgetArea,
+            self.objectexplorerDockWidget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.plotsettingsDockWidget)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.loggingDockWidget)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.recordDockWidget)
 
         self.load_settings()
 
@@ -224,11 +228,14 @@ class MainWindow(QMainWindow):
             self.objectexplorerDockWidget.toggleViewAction())
         self.viewMenu.addAction(self.plotsettingsDockWidget.toggleViewAction())
         self.viewMenu.addAction(self.loggingDockWidget.toggleViewAction())
+        self.viewMenu.addAction(self.recordDockWidget.toggleViewAction())
 
         # record menu
         self.recordMenu = self.menuBar().addMenu(self.tr("Record"))
         self.recordMenu.addAction(self.startrecordingAction)
         self.recordMenu.addAction(self.stoprecordingAction)
+        self.recordMenu.addSeparator()
+        self.recordMenu.addAction(self.recordsettingsAction)
 
         # info menu
         self.menuBar().addAction(self.infoAction)
@@ -343,6 +350,7 @@ class MainWindow(QMainWindow):
         # refresh widgets
         self.objectexplorer.refresh()
         self.plot.refresh(datetime.datetime.now())
+        self.recordWidget.add_data(self.rootnode)
 
     def send_serialdata(self, node):
         if isinstance(node, JsonItem):

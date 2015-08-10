@@ -10,6 +10,11 @@ media-record-6.png / oxygen / CC-BY-SA 3.0 or LGPL
 network-connect-3.png / oxygen / CC-BY-SA 3.0 or LGPL
 network-disconnect-3.png / oxygen / CC-BY-SA 3.0 or LGPL
 window-close-3.png / oxygen / CC-BY-SA 3.0 or LGPL
+list_add.png / oxygen / CC-BY-SA 3.0 or LGPL
+list_remove.png / oxygen / CC-BY-SA 3.0 or LGPL
+edit.png / oxygen / CC-BY-SA 3.0 or LGPL
+preferences_other.png / oxygen / CC-BY-SA 3.0 or LGPL
+kgpg_key1_kgpg.png / oxygen / CC-BY-SA 3.0 or LGPL
 
 MIT License (MIT)
     link: http://creativecommons.org/licenses/MIT/
