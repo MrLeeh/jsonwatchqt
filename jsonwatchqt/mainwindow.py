@@ -398,8 +398,8 @@ class MainWindow(QMainWindow):
 
         # Serial connection
         try:
-            self.serial.setPort(port)
-            self.serial.setBaudrate(baudrate)
+            self.serial.port = port
+            self.serial.baudrate = baudrate
             self.serial.open()
         except ValueError:
             QMessageBox.critical(
