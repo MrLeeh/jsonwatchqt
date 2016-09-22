@@ -13,7 +13,8 @@ import json
 
 import serial
 from qtpy.QtWidgets import QAction, QDialog, QMainWindow, QMessageBox, \
-    QDockWidget, QLabel, QFileDialog, QApplication, QPixmap
+    QDockWidget, QLabel, QFileDialog, QApplication
+from qtpy.QtGui import QIcon
 from qtpy.QtCore import QSettings, QCoreApplication, Qt, QThread, \
     Signal
 
@@ -28,7 +29,9 @@ from jsonwatchqt.plotwidget import PlotWidget
 from jsonwatchqt.serialdialog import SerialDialog, PORT_SETTING, \
     BAUDRATE_SETTING
 from jsonwatchqt.utilities import critical, pixmap
-from jsonwatchqt.recorder import tabulate, RecordWidget
+from jsonwatchqt.recorder import RecordWidget
+from jsonwatchqt.csvsettings import CSVSettingsDialog, DECIMAL_SETTING, \
+    SEPARATOR_SETTING
 
 
 logger = logging.getLogger("jsonwatchqt.mainwindow")
@@ -50,7 +53,7 @@ def bytearray_to_utf8(x):
 
 
 class SerialWorker(QThread):
-    data_received = Signal(str)
+    data_received = Signal(datetime.datetime, str)
 
     def __init__(self, ser: serial.Serial, parent=None):
         super().__init__(parent)
@@ -62,6 +65,7 @@ class SerialWorker(QThread):
             try:
                 if self.serial.isOpen() and self.serial.inWaiting():
                     self.data_received.emit(
+                        datetime.datetime.now(),
                         strip(bytearray_to_utf8(self.serial.readline()))
                     )
             except SerialException:
@@ -75,7 +79,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.counter = 0
+        self.recording_enabled = False
         self.serial = serial.Serial()
         self.rootnode = JsonNode('')
         self.settings = QSettingsManager()
@@ -90,56 +94,49 @@ class MainWindow(QMainWindow):
         self.objectexplorer = ObjectExplorer(self.rootnode, self)
         self.objectexplorer.nodevalue_changed.connect(self.send_serialdata)
         self.objectexplorer.nodeproperty_changed.connect(self.set_dirty)
-        self.objectexplorerDockWidget = QDockWidget(
-            self.tr("object explorer"), self
-        )
+        self.objectexplorerDockWidget = QDockWidget(self.tr("object explorer"),
+                                                    self)
         self.objectexplorerDockWidget.setObjectName(
             "objectexplorer_dockwidget")
         self.objectexplorerDockWidget.setWidget(self.objectexplorer)
 
+        # plot widget
+        self.plot = PlotWidget(self.rootnode, self.settings, self)
+
         # plot settings
-        self.plotsettings = PlotSettingsWidget(self.settings, self)
-        self.plotsettingsDockWidget = QDockWidget(
-            self.tr("plot settings"), self
-        )
-        self.plotsettingsDockWidget.setObjectName(
-            "plotsettings_dockwidget")
+        self.plotsettings = PlotSettingsWidget(self.settings, self.plot, self)
+        self.plotsettingsDockWidget = QDockWidget(self.tr("plot settings"),
+                                                  self)
+        self.plotsettingsDockWidget.setObjectName("plotsettings_dockwidget")
         self.plotsettingsDockWidget.setWidget(self.plotsettings)
 
         # log widget
         self.loggingWidget = LoggingWidget(self)
-        self.loggingDockWidget = QDockWidget(
-            self.tr("logger"), self
-        )
+        self.loggingDockWidget = QDockWidget(self.tr("logger"), self)
         self.loggingDockWidget.setObjectName("logging_dockwidget")
         self.loggingDockWidget.setWidget(self.loggingWidget)
 
         # record widget
         self.recordWidget = RecordWidget(self.rootnode, self)
-        self.recordDockWidget = QDockWidget(
-            self.tr("data recording"), self
-        )
+        self.recordDockWidget = QDockWidget(self.tr("data recording"), self)
         self.recordDockWidget.setObjectName("record_dockwidget")
         self.recordDockWidget.setWidget(self.recordWidget)
-
-        # Plot Widget
-        self.plot = PlotWidget(self.rootnode, self.settings, self)
 
         # actions and menus
         self._init_actions()
         self._init_menus()
 
-        # StatusBar
+        # statusbar
         statusbar = self.statusBar()
         statusbar.setVisible(True)
         self.connectionstateLabel = QLabel(self.tr("Not connected"))
         statusbar.addPermanentWidget(self.connectionstateLabel)
         statusbar.showMessage(self.tr("Ready"))
 
-        # Layout
+        # layout
         self.setCentralWidget(self.plot)
         self.addDockWidget(Qt.LeftDockWidgetArea,
-            self.objectexplorerDockWidget)
+                           self.objectexplorerDockWidget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.plotsettingsDockWidget)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.loggingDockWidget)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.recordDockWidget)
@@ -150,58 +147,71 @@ class MainWindow(QMainWindow):
         # Serial Dialog
         self.serialdlgAction = QAction(self.tr("Serial Settings..."), self)
         self.serialdlgAction.setShortcut("F6")
+        self.serialdlgAction.setIcon(QIcon(pixmap("configure.png")))
         self.serialdlgAction.triggered.connect(self.show_serialdlg)
 
         # Connect
         self.connectAction = QAction(self.tr("Connect"), self)
         self.connectAction.setShortcut("F5")
-        self.connectAction.setIcon(pixmap("network-connect-3.png"))
+        self.connectAction.setIcon(QIcon(pixmap("network-connect-3.png")))
         self.connectAction.triggered.connect(self.toggle_connect)
 
         # Quit
         self.quitAction = QAction(self.tr("Quit"), self)
         self.quitAction.setShortcut("Alt+F4")
-        self.quitAction.setIcon(pixmap("window-close-3.png"))
+        self.quitAction.setIcon(QIcon(pixmap("window-close-3.png")))
         self.quitAction.triggered.connect(self.close)
 
         # Save Config as
         self.saveasAction = QAction(self.tr("Save as..."), self)
         self.saveasAction.setShortcut("Ctrl+Shift+S")
-        self.saveasAction.setIcon(pixmap("document-save-as-5.png"))
+        self.saveasAction.setIcon(QIcon(pixmap("document-save-as-5.png")))
         self.saveasAction.triggered.connect(self.show_savecfg_dlg)
 
         # Save file
         self.saveAction = QAction(self.tr("Save"), self)
         self.saveAction.setShortcut("Ctrl+S")
-        self.saveAction.setIcon(pixmap("document-save-5.png"))
+        self.saveAction.setIcon(QIcon(pixmap("document-save-5.png")))
         self.saveAction.triggered.connect(self.save_file)
 
         # Load file
         self.loadAction = QAction(self.tr("Open..."), self)
         self.loadAction.setShortcut("Ctrl+O")
-        self.loadAction.setIcon(pixmap("document-open-7.png"))
+        self.loadAction.setIcon(QIcon(pixmap("document-open-7.png")))
         self.loadAction.triggered.connect(self.show_opencfg_dlg)
 
         # New
         self.newAction = QAction(self.tr("New"), self)
         self.newAction.setShortcut("Ctrl+N")
-        self.newAction.setIcon(pixmap("document-new-6.png"))
+        self.newAction.setIcon(QIcon(pixmap("document-new-6.png")))
         self.newAction.triggered.connect(self.new)
 
         # start recording
         self.startrecordingAction = QAction(self.tr("Start recording"), self)
         self.startrecordingAction.setShortcut("F9")
-        self.startrecordingAction.setIcon(pixmap("media-record-6.png"))
+        self.startrecordingAction.setIcon(QIcon(pixmap("media-record-6.png")))
         self.startrecordingAction.triggered.connect(self.start_recording)
 
         # stop recording
         self.stoprecordingAction = QAction(self.tr("Stop recording"), self)
         self.stoprecordingAction.setShortcut("F10")
-        self.stoprecordingAction.setIcon(pixmap("media-playback-stop-8.png"))
+        self.stoprecordingAction.setIcon(QIcon(pixmap("media-playback-stop-8.png")))
+        self.stoprecordingAction.setEnabled(False)
         self.stoprecordingAction.triggered.connect(self.stop_recording)
+
+        # clear record
+        self.clearrecordAction = QAction(self.tr("Clear"), self)
+        self.clearrecordAction.setIcon(QIcon(pixmap("editclear.png")))
+        self.clearrecordAction.triggered.connect(self.clear_record)
+
+        # export record
+        self.exportcsvAction = QAction(self.tr("Export to csv..."), self)
+        self.exportcsvAction.setIcon(QIcon(pixmap("text_csv.png")))
+        self.exportcsvAction.triggered.connect(self.export_csv)
 
         # show record settings
         self.recordsettingsAction = QAction(self.tr("Settings..."), self)
+        self.recordsettingsAction.setIcon(QIcon(pixmap("configure.png")))
         self.recordsettingsAction.triggered.connect(self.show_recordsettings)
 
         # Info
@@ -234,6 +244,9 @@ class MainWindow(QMainWindow):
         self.recordMenu = self.menuBar().addMenu(self.tr("Record"))
         self.recordMenu.addAction(self.startrecordingAction)
         self.recordMenu.addAction(self.stoprecordingAction)
+        self.recordMenu.addAction(self.exportcsvAction)
+        self.recordMenu.addSeparator()
+        self.recordMenu.addAction(self.clearrecordAction)
         self.recordMenu.addSeparator()
         self.recordMenu.addAction(self.recordsettingsAction)
 
@@ -340,8 +353,9 @@ class MainWindow(QMainWindow):
         jsonstring = json.dumps({"resetpid": 1})
         self.serial.write(bytearray(jsonstring, 'utf-8'))
 
-    def receive_serialdata(self, data):
+    def receive_serialdata(self, time, data):
         self.loggingWidget.log_input(data)
+
         try:
             self.rootnode.from_json(data)
         except ValueError as e:
@@ -349,8 +363,9 @@ class MainWindow(QMainWindow):
 
         # refresh widgets
         self.objectexplorer.refresh()
-        self.plot.refresh(datetime.datetime.now())
-        self.recordWidget.add_data(self.rootnode)
+        self.plot.refresh(time)
+        if self.recording_enabled:
+            self.recordWidget.add_data(time, self.rootnode)
 
     def send_serialdata(self, node):
         if isinstance(node, JsonItem):
@@ -404,7 +419,7 @@ class MainWindow(QMainWindow):
             self.worker.start()
 
             self.connectAction.setText(self.tr("Disconnect"))
-            self.connectAction.setIcon(pixmap("network-disconnect-3.png"))
+            self.connectAction.setIcon(QIcon(pixmap("network-disconnect-3.png")))
             self.serialdlgAction.setEnabled(False)
             self.connectionstateLabel.setText(
                 self.tr("Connected to %s") % port)
@@ -415,7 +430,7 @@ class MainWindow(QMainWindow):
         self.worker.quit()
         self.serial.close()
         self.connectAction.setText(self.tr("Connect"))
-        self.connectAction.setIcon(pixmap("network-connect-3.png"))
+        self.connectAction.setIcon(QIcon(pixmap("network-connect-3.png")))
         self.serialdlgAction.setEnabled(True)
         self.connectionstateLabel.setText(self.tr("Not connected"))
         self._connected = False
@@ -463,13 +478,39 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(s)
 
     def start_recording(self):
-        pass
+        self.recording_enabled = True
+        self.startrecordingAction.setEnabled(False)
+        self.stoprecordingAction.setEnabled(True)
 
     def stop_recording(self):
-        pass
+        self.recording_enabled = False
+        self.startrecordingAction.setEnabled(True)
+        self.stoprecordingAction.setEnabled(False)
+
+    def export_csv(self):
+        filename, _ = QFileDialog.getSaveFileName(
+            self, QCoreApplication.applicationName(),
+            filter="CSV files(*.csv);;All files (*.*)"
+        )
+
+        if filename == "":
+            return
+
+        # get current dataframe and export to csv
+        df = self.recordWidget.dataframe
+        decimal = self.settings.get(DECIMAL_SETTING)
+        df = df.applymap(lambda x: str(x).replace(".", decimal))
+        df.to_csv(
+            filename, index_label="seconds",
+            sep=self.settings.get(SEPARATOR_SETTING)
+        )
+
+    def clear_record(self):
+        self.recordWidget.clear()
 
     def show_recordsettings(self):
-        pass
+        dlg = CSVSettingsDialog(self)
+        dlg.exec_()
 
     # filename property
     @property

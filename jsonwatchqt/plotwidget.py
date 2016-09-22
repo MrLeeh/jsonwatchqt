@@ -1,14 +1,19 @@
 """
-    Copyright © 2015 by Stefan Lehmann
+    jsonwatchqt.plotwidget.py,
+
+    copyright (c) 2015 by Stefan Lehmann,
+    licensed under the MIT license
 
 """
 import datetime
 import os
 import sys
-from qtpy.QtCore import QByteArray, QIODevice, QDataStream, QSettings
+from qtpy.QtCore import QByteArray, QIODevice, QDataStream
 from qtpy.QtGui import QDragEnterEvent, QDropEvent
 from qtpy.QtWidgets import QWidget, QVBoxLayout, QApplication
 from jsonwatch.jsonnode import JsonNode
+from jsonwatchqt.plotsettings import AUTOSCALE_COMPLETE, AUTOSCALE_AUTOSCROLL, \
+    AUTOSCALE_NONE
 
 import matplotlib
 
@@ -27,10 +32,11 @@ import pylab
 
 
 class PlotItem:
+
     def __init__(self, dataitem, line):
         self.dataitem = dataitem
         self.line = line
-        self.xdata =[]
+        self.xdata = []
         self.ydata = []
 
     def add_data(self, x, y):
@@ -40,6 +46,7 @@ class PlotItem:
 
 
 class MyCanvas(FigureCanvas):
+
     def __init__(self, figure, parent=None):
         super().__init__(figure)
         self.setParent(parent)
@@ -60,6 +67,7 @@ class MyCanvas(FigureCanvas):
 
 
 class PlotWidget(QWidget):
+
     def __init__(self, rootnode: JsonNode, settings, parent=None):
         super().__init__(parent)
         self.settings = settings
@@ -94,7 +102,7 @@ class PlotWidget(QWidget):
             return
 
         # append plotlist, plot data
-        line = self.ax1.plot([],[], label=item.key)[0]
+        line = self.ax1.plot([], [], label=item.key)[0]
         self.plotitems.append(PlotItem(item, line))
 
         # draw legend
@@ -112,11 +120,14 @@ class PlotWidget(QWidget):
         for plotitem in self.plotitems:
             plotitem.add_data(timedelta, plotitem.dataitem.value)
 
-        if autoscale[0]: # complete autoscale
+        # complete autoscale
+        if autoscale[0]:
             self.ax1.relim()
             self.ax1.autoscale()
             self.ax1.autoscale_view()
-        elif autoscale[1]: # autoscrolle x axis
+
+        # autoscroll x axis
+        elif autoscale[1]:
             xmin, xmax = self.ax1.get_xlim()
             delta = xmax - xmin
             xmax = timedelta + 0.1 * delta
@@ -133,6 +144,48 @@ class PlotWidget(QWidget):
         self.settings.set('plot/ymin', float(ymin))
         self.settings.set('plot/ymax', float(ymax))
 
+    def draw(self):
+        self.canvas.draw()
+
+    # xmin property
+    @property
+    def xmin(self):
+        return self.ax1.get_xlim()[0]
+
+    @xmin.setter
+    def xmin(self, value):
+        xmax = self.ax1.get_xlim()[1]
+        self.ax1.set_xlim(value, xmax)
+
+    # xmax property
+    @property
+    def xmax(self):
+        return self.ax1.get_xlim()[1]
+
+    @xmax.setter
+    def xmax(self, value):
+        xmin = self.ax1.get_xlim()[0]
+        self.ax1.set_xlim(xmin, value)
+
+    # ymin property
+    @property
+    def ymin(self):
+        return self.ax1.get_ylim()[0]
+
+    @ymin.setter
+    def ymin(self, value):
+        ymax = self.ax1.get_ylim()[1]
+        self.ax1.set_ylim(value, ymax)
+
+    # ymax property
+    @property
+    def ymax(self):
+        return self.ax1.get_ylim()[1]
+
+    @ymax.setter
+    def ymax(self, value):
+        ymin = self.ax1.get_ylim()[0]
+        self.ax1.set_ylim(ymin, value)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

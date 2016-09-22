@@ -9,8 +9,9 @@ import logging
 
 from qtpy.QtCore import QModelIndex, Qt, QAbstractItemModel, QMimeData, \
     QByteArray, QDataStream, QIODevice, QPoint
+from qtpy.QtGui import QIcon
 from qtpy.QtWidgets import QTreeView, QItemDelegate, QSpinBox, \
-    QDoubleSpinBox, QMenu, QAction, QInputDialog, QDialog, QPixmap
+    QDoubleSpinBox, QMenu, QAction, QInputDialog, QDialog
 
 from jsonwatch.abstractjsonitem import AbstractJsonItem
 from jsonwatch.jsonnode import JsonNode
@@ -290,33 +291,33 @@ class ObjectExplorer(QTreeView):
         # actions
         # properties action
         self.propertiesAction = QAction(self.tr("properties"), self)
-        self.propertiesAction.setIcon(pixmap("document_properties.png"))
+        self.propertiesAction.setIcon(QIcon(pixmap("document_properties.png")))
         self.propertiesAction.triggered.connect(self.show_properties)
 
         # edit action
         self.editAction = QAction(self.tr("edit value"), self)
         self.editAction.setShortcut("F2")
-        self.editAction.setIcon(pixmap("edit.png"))
+        self.editAction.setIcon(QIcon(pixmap("edit.png")))
         self.editAction.triggered.connect(self.edit_value)
 
         # edit key action
         self.editkeyAction = QAction(self.tr("edit key"), self)
-        self.editkeyAction.setIcon(pixmap("kgpg_key1_kgpg.png"))
+        self.editkeyAction.setIcon(QIcon(pixmap("kgpg_key1_kgpg.png")))
         self.editkeyAction.triggered.connect(self.edit_key)
 
         # insert item action
         self.insertitemAction = QAction(self.tr("insert item"), self)
-        self.insertitemAction.setIcon(pixmap("list_add.png"))
+        self.insertitemAction.setIcon(QIcon(pixmap("list_add.png")))
         self.insertitemAction.triggered.connect(self.insert_item)
 
         # insert node action
         self.insertnodeAction = QAction(self.tr("insert node"), self)
-        self.insertnodeAction.setIcon(pixmap("list_add.png"))
+        self.insertnodeAction.setIcon(QIcon(pixmap("list_add.png")))
         self.insertnodeAction.triggered.connect(self.insert_node)
 
         # remove item action
         self.removeitemAction = QAction(self.tr("remove"), self)
-        self.removeitemAction.setIcon(pixmap("list_remove"))
+        self.removeitemAction.setIcon(QIcon(pixmap("list_remove")))
         self.removeitemAction.triggered.connect(self.remove_item)
 
     def data_changed(self, topleft, bottomright, *args):
@@ -365,19 +366,23 @@ class ObjectExplorer(QTreeView):
 
     def insert_item(self):
         index = self.currentIndex()
+
         if index.isValid():
             node = index.internalPointer()
-            key, b = QInputDialog.getText(
-                self, "Insert Json item", "Insert key for new item:")
+        else:
+            node = self.model().root
 
-            if not b:
-                return
+        key, b = QInputDialog.getText(
+            self, "Insert Json item", "Insert key for new item:")
 
-            item = JsonItem(key)
-            node.add(item)
-            row = node.index(item)
-            self.model().beginInsertRows(index, row, row)
-            self.model().endInsertRows()
+        if not b:
+            return
+
+        item = JsonItem(key)
+        node.add(item)
+        row = node.index(item)
+        self.model().beginInsertRows(index, row, row)
+        self.model().endInsertRows()
 
     def insert_node(self):
         index = self.currentIndex()
