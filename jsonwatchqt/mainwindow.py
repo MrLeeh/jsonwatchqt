@@ -52,6 +52,13 @@ def bytearray_to_utf8(x):
     return x.decode('utf-8')
 
 
+def set_default_settings(settings: QSettingsManager):
+    settings.set_defaults({
+        DECIMAL_SETTING: ',',
+        SEPARATOR_SETTING: ';'
+    })
+
+
 class SerialWorker(QThread):
     data_received = Signal(datetime.datetime, str)
 
@@ -82,10 +89,13 @@ class MainWindow(QMainWindow):
         self.recording_enabled = False
         self.serial = serial.Serial()
         self.rootnode = JsonNode('')
-        self.settings = QSettingsManager()
         self._connected = False
         self._dirty = False
         self._filename = None
+
+        # settings
+        self.settings = QSettingsManager()
+        set_default_settings(self.settings)
 
         # Controller Settings
         self.settingsDialog = None

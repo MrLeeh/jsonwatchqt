@@ -42,8 +42,8 @@ class CSVSettingsDialog(QDialog):
         self.buttons.rejected.connect(self.reject)
 
         # layout
-        layout = QGridLayout(),
-        layout.addWidget(self.decimalLabel, 0, )
+        layout = QGridLayout()
+        layout.addWidget(self.decimalLabel, 0, 0)
         layout.addWidget(self.decimalComboBox, 0, 1)
         layout.addWidget(self.separatorLabel, 1, 0)
         layout.addWidget(self.separatorComboBox, 1, 1)
