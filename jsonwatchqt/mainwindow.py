@@ -511,7 +511,7 @@ class MainWindow(QMainWindow):
         decimal = self.settings.get(DECIMAL_SETTING)
         df = df.applymap(lambda x: str(x).replace(".", decimal))
         df.to_csv(
-            filename, index_label="seconds",
+            filename, index_label="time",
             sep=self.settings.get(SEPARATOR_SETTING)
         )
 
