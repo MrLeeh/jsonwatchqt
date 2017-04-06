@@ -1,0 +1,17 @@
+-e git+https://github.com/MrLeeh/jsonwatch.git#egg=jsonwatch
+-e git+https://github.com/MrLeeh/pyqtconfig#egg=pyqtconfig
+
+appdirs
+cycler
+jsonpickle
+matplotlib
+numpy
+packaging
+pandas
+pyparsing
+PyQt5
+pyserial
+python-dateutil
+pytz
+QtPy
+six
