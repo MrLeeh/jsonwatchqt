@@ -2,6 +2,7 @@
 -e git+https://github.com/MrLeeh/pyqtconfig#egg=pyqtconfig
 
 appdirs
+blinker
 cycler
 jsonpickle
 matplotlib

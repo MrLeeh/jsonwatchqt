@@ -7,6 +7,7 @@
 -e git+https://github.com/MrLeeh/jsonwatch.git#egg=jsonwatch
 -e git+https://github.com/MrLeeh/pyqtconfig#egg=pyqtconfig
 appdirs==1.4.3
+blinker==1.4
 cycler==0.10.0
 jsonpickle==0.9.4
 matplotlib==2.0.0
